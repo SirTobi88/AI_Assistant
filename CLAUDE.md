@@ -19,3 +19,7 @@
 - Firmware-Module: `rxq` (Empfang + Zusammensetzen gestückelter Nachrichten, Host-Test in
   `firmware/test/test_rxq`), `proto` (typisierte Nachrichten → `AppState`, Befehle),
   `ringmenu` (LVGL-Ring), `app` (Ansichten, Gesten, Prompt-Popup).
+- Sim-Build: nach Änderungen an Headern/Schriften stürzte ein inkrementell gebautes `program`
+  mehrfach ab (Segfault ohne Ausgabe) — dann `rm -rf firmware/.pio/build/sim` und neu bauen.
+- Schriften: `tools/gen_fonts.py` erzeugt Styrene 12–28 mit Latin-1 + „ “ – — … (Umlaute);
+  Zeilenhöhe/Baseline bleiben wie in den alten ASCII-Dateien. Font-Quelle: AI_Limitmeter/assets.
