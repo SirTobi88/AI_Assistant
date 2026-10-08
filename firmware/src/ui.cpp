@@ -1,0 +1,1849 @@
+#include "ui.h"
+#include "splash.h"
+#include "charge_anim.h"
+#include <lvgl.h>
+#include <math.h>
+#include <time.h>
+#include "logo.h"
+#include "clawd_still.h"
+#include "icons.h"
+#include "theme.h"
+#include "hal/board_caps.h"
+
+// Custom fonts (scaled for 314 PPI, ~1.9x from original 165 PPI)
+LV_FONT_DECLARE(font_tiempos_56);
+LV_FONT_DECLARE(font_tiempos_34);
+LV_FONT_DECLARE(font_styrene_48);
+LV_FONT_DECLARE(font_styrene_28);
+LV_FONT_DECLARE(font_styrene_24);
+LV_FONT_DECLARE(font_styrene_20);
+LV_FONT_DECLARE(font_styrene_16);
+LV_FONT_DECLARE(font_styrene_14);
+LV_FONT_DECLARE(font_styrene_12);
+LV_FONT_DECLARE(font_mono_32);
+LV_FONT_DECLARE(font_mono_18);
+
+// Layout values computed from the active board's geometry. Populated once
+// in ui_init() and treated as const for the rest of the program. Adding a
+// new display size means extending compute_layout() with another
+// breakpoint — never editing the screen-builder functions below.
+struct Layout {
+    int16_t scr_w, scr_h;
+    int16_t margin;
+    int16_t title_y;
+    int16_t content_y;
+    int16_t content_w;
+
+    // Usage screen
+    int16_t usage_panel_h;
+    int16_t usage_panel_gap;
+    int16_t usage_bar_y;
+    int16_t usage_reset_y;
+    int16_t bar_h;
+    int16_t panel_pad_x, panel_pad_y;
+    int16_t pill_pad_x, pill_pad_y;
+    const lv_font_t* title_font;     // screen title / clock
+    const lv_font_t* pct_font;       // big percentage number
+    const lv_font_t* ent_pct_font;   // enterprise spending number
+    const lv_font_t* pill_font;      // "Current" / "Weekly" pill
+    const lv_font_t* reset_font;     // "Resets in ..." line
+    const lv_font_t* pace_font;      // enterprise "Under/On/Over pace" line
+    const lv_font_t* anim_font;      // animated status line
+    int16_t anim_y;                  // status line offset from bottom
+    bool    show_logo;               // corner logo; off on round panels, where no corner is visible
+    bool    small_icons;             // 40px logo + 24px battery (vs 80/48) on small screens
+    int16_t title_nudge;             // title x-shift balancing the corner logo
+    int16_t logo_y;                  // logo top edge
+    int16_t batt_y;                  // battery icon top edge
+    int16_t batt_w;                  // battery icon width, for position math
+
+    // Round panels: two ring gauges (session outside, weekly inside) replace
+    // the bar panels; the numbers stack in the middle. The r_* values are
+    // label offsets from the screen centre.
+    bool    round;
+    int16_t ring_d;                  // outer ring diameter
+    int16_t ring_w;                  // stroke width
+    int16_t ring_gap;                // space between the two rings
+    int16_t ring_start, ring_end;    // sweep in LVGL degrees (0 = 3 o'clock, clockwise)
+    int16_t ring_tick_w;             // quarter-mark notch width (0 = none)
+    int16_t ring_label_r;            // radius of the quarter-mark labels, inside the rings
+    const lv_font_t* ring_label_font;
+
+    // Gauge colours: track, and fill (bars: below the 50 / 80 % warning
+    // levels; rings: always)
+    lv_color_t gauge_track;
+    lv_color_t gauge_ok;
+    const lv_font_t* week_pct_font;  // weekly number, one step below the session number
+    int16_t r_s_label_y, r_s_pct_y, r_s_reset_y;
+    int16_t r_w_row_y, r_w_reset_y;
+
+    // Combo screen: one panel per provider, each a name row and two compact
+    // gauge rows ("5h" / "7d": label, bar, number, reset). Row offsets are
+    // inside the panel's padding. The label / number / reset columns are
+    // measured on the widest text they can show; the bar takes what is left.
+    int16_t combo_x, combo_y, combo_w, combo_h, combo_gap;
+    int16_t combo_pad_x, combo_pad_y;
+    int16_t combo_row1_y, combo_row2_y;
+    int16_t combo_bar_h;
+    int16_t combo_col_gap;
+    const lv_font_t* combo_head_font;  // provider name
+    const lv_font_t* combo_font;       // row text
+
+    // Pairing hint / idle screen
+    int16_t pair_y1, pair_y2, pair_y3;
+    int16_t idle_px;                 // sleeping-creature size on the idle screen
+
+    // Bluetooth screen
+    int16_t bt_info_panel_h;
+    int16_t bt_reset_zone_h;
+    const lv_font_t* bt_title_font;
+    const lv_font_t* bt_status_font;
+    const lv_font_t* bt_device_font;
+    const lv_font_t* bt_credit_1_font;
+    const lv_font_t* bt_credit_2_font;
+};
+static Layout L = {};
+
+// Pick layout values from the active board's pixel dimensions. The two
+// existing boards happen to land on the two breakpoints below; new ports
+// inherit the closer one — visually OK, may need a polish pass for
+// pixel-perfect alignment but never blocks the port from booting.
+static void compute_layout(const BoardCaps& c) {
+    L.scr_w = c.width;
+    L.scr_h = c.height;
+    L.margin = 20;
+    L.title_y = 30;
+
+    // Values shared by the two original breakpoints; the small branch below
+    // overrides them wholesale.
+    L.bar_h = 24;
+    L.panel_pad_x = 16;
+    L.panel_pad_y = 12;
+    L.pill_pad_x = 18;
+    L.pill_pad_y = 6;
+    L.title_font   = &font_tiempos_56;
+    L.pct_font     = &font_styrene_48;
+    L.ent_pct_font = &font_tiempos_56;
+    L.pill_font    = &font_styrene_28;
+    L.reset_font   = &font_styrene_28;
+    L.pace_font    = &font_styrene_16;
+    L.anim_font    = &font_mono_32;
+    L.anim_y = -15;
+    L.show_logo = true;
+    L.round = false;
+    L.gauge_track = THEME_BAR_BG;
+    L.gauge_ok    = THEME_GREEN;
+    L.small_icons = false;
+    L.title_nudge = 16;
+    L.logo_y = L.title_y - 10;
+    L.batt_y = L.title_y;
+    L.batt_w = ICON_BATTERY_W;
+    L.pair_y1 = 40;
+    L.pair_y2 = 120;
+    L.pair_y3 = 160;
+    L.idle_px = 160;
+
+    if (c.height >= 460) {
+        // Large layout — tuned for 480x480 (AMOLED-2.16).
+        L.content_y = 100;
+        L.usage_panel_h = 150;
+        L.usage_panel_gap = 16;
+        L.usage_bar_y = 56;
+        L.usage_reset_y = 94;
+        L.bt_info_panel_h = 160;
+        L.bt_reset_zone_h = 110;
+        L.bt_title_font    = &font_tiempos_56;
+        L.bt_status_font   = &font_styrene_48;
+        L.bt_device_font   = &font_styrene_28;
+        L.bt_credit_1_font = &font_styrene_24;
+        L.bt_credit_2_font = &font_styrene_20;
+        L.combo_head_font = &font_styrene_28;
+        L.combo_font      = &font_styrene_24;
+        L.combo_row1_y = 46;
+        L.combo_row2_y = 88;
+        L.combo_bar_h = 16;
+        L.combo_col_gap = 10;
+    } else if (c.height >= 300) {
+        // Compact layout — tuned for 368x448 (AMOLED-1.8).
+        L.content_y = 85;
+        L.usage_panel_h = 130;
+        L.usage_panel_gap = 12;
+        L.usage_bar_y = 48;
+        L.usage_reset_y = 78;
+        L.bt_info_panel_h = 140;
+        L.bt_reset_zone_h = 90;
+        L.bt_title_font    = &font_tiempos_34;
+        L.bt_status_font   = &font_styrene_28;
+        L.bt_device_font   = &font_styrene_20;
+        L.bt_credit_1_font = &font_styrene_16;
+        L.bt_credit_2_font = &font_styrene_14;
+        L.combo_head_font = &font_styrene_24;
+        L.combo_font      = &font_styrene_20;
+        L.combo_row1_y = 38;
+        L.combo_row2_y = 72;
+        L.combo_bar_h = 12;
+        L.combo_col_gap = 8;
+    } else {
+        // Small layout — tuned for 240x240 (LCD-1.54 and similar square TFTs).
+        // Everything shrinks: fonts two steps down, panels ~half height, and
+        // the corner logo/battery switch to the 40px/24px small assets.
+        L.margin = 8;
+        L.title_y = 4;
+        L.content_y = 52;        // header tall enough for the 72x48 corner Clawd
+        L.usage_panel_h = 70;    // ...paid for by the two panels, 4 px each
+        L.usage_panel_gap = 6;
+        L.usage_bar_y = 30;
+        L.usage_reset_y = 46;
+        L.bar_h = 12;
+        L.panel_pad_x = 10;
+        L.panel_pad_y = 6;
+        L.pill_pad_x = 8;
+        L.pill_pad_y = 2;
+        L.title_font   = &font_tiempos_34;
+        L.pct_font     = &font_styrene_24;
+        L.ent_pct_font = &font_tiempos_34;
+        L.pill_font    = &font_styrene_14;
+        L.reset_font   = &font_styrene_14;
+        L.pace_font    = &font_styrene_12;
+        L.anim_font    = &font_mono_18;
+        // Center the status line in the strip below the weekly panel; flush
+        // against the bottom edge it reads as unevenly spaced.
+        L.anim_y = -10;
+        L.small_icons = true;
+        L.title_nudge = 8;
+        L.logo_y = 2;
+        L.batt_y = 10;
+        L.batt_w = ICON_BATTERY_SMALL_W;
+        L.pair_y1 = 12;
+        L.pair_y2 = 56;
+        L.pair_y3 = 80;
+        L.idle_px = 96;
+        L.bt_info_panel_h = 90;
+        L.bt_reset_zone_h = 60;
+        L.bt_title_font    = &font_tiempos_34;
+        L.bt_status_font   = &font_styrene_20;
+        L.bt_device_font   = &font_styrene_14;
+        L.bt_credit_1_font = &font_styrene_12;
+        L.bt_credit_2_font = &font_styrene_12;
+        L.combo_head_font = &font_styrene_14;
+        L.combo_font      = &font_styrene_14;
+        L.combo_row1_y = 20;
+        L.combo_row2_y = 39;
+        L.combo_bar_h = 8;
+        L.combo_col_gap = 5;
+    }
+
+    // The combo panels take the place of the two detail panels.
+    L.combo_x = L.margin;
+    L.combo_y = L.content_y;
+    L.combo_w = c.width - 2 * L.margin;
+    L.combo_h = L.usage_panel_h;
+    L.combo_gap = L.usage_panel_gap;
+    L.combo_pad_x = L.panel_pad_x;
+    L.combo_pad_y = L.panel_pad_y;
+
+    if (c.is_round) {
+        // Round layout — tuned for 360x360 (Knob-1.8). Applied on top of the
+        // size breakpoint above; only what the circle changes is overridden.
+        // Rings: 6 px off the bezel, 270° sweep with the gap at the bottom,
+        // where the status line sits. Everything else stays inside the inner
+        // ring (inner edge ~140 px from the centre).
+        const int16_t mind = c.width < c.height ? c.width : c.height;
+        L.round = true;
+        L.show_logo = false;
+        L.ring_d = mind - 12;
+        L.ring_w = 14;
+        L.ring_gap = 6;
+        L.ring_start = 135;
+        L.ring_end = 45;
+        L.ring_tick_w = 3;
+        L.ring_label_r = 128;
+        L.ring_label_font = &font_styrene_12;
+        // Always-orange fill (set_gauge doesn't recolour rings) on a lighter
+        // track, so the unfilled part of the scale is visible too.
+        L.gauge_track = THEME_RING_BG;
+        L.gauge_ok    = THEME_ACCENT;
+        L.title_font   = &font_tiempos_34;
+        L.title_y = 62;
+        L.title_nudge = 0;
+        L.pct_font      = &font_styrene_48;
+        L.ent_pct_font  = &font_tiempos_56;
+        L.week_pct_font = &font_styrene_28;
+        L.pill_font     = &font_styrene_16;
+        L.reset_font    = &font_styrene_16;
+        L.pace_font     = &font_styrene_14;
+        L.anim_font     = &font_mono_18;
+        L.anim_y = -36;
+        L.r_s_label_y = -60;
+        L.r_s_pct_y   = -26;
+        L.r_s_reset_y = 12;
+        L.r_w_row_y   = 50;
+        L.r_w_reset_y = 80;
+        // Pairing hint and idle creature: the rings are hidden there, so the
+        // full circle is available below the title.
+        L.content_y = 118;
+        L.pair_y1 = 4;
+        L.pair_y2 = 62;
+        L.pair_y3 = 92;
+        L.idle_px = 160;
+        L.bt_status_font = &font_styrene_28;
+        L.bt_device_font = &font_styrene_20;
+        // Combo: two panels stacked in the middle of the circle, narrow
+        // enough that their corners stay well inside the bezel.
+        L.combo_w = 260;
+        L.combo_x = (c.width - L.combo_w) / 2;
+        L.combo_y = 108;
+        L.combo_h = 80;
+        L.combo_gap = 8;
+        L.combo_pad_x = 10;
+        L.combo_pad_y = 8;
+        L.combo_head_font = &font_styrene_16;
+        L.combo_font      = &font_styrene_16;
+        L.combo_row1_y = 22;
+        L.combo_row2_y = 43;
+        L.combo_bar_h = 8;
+        L.combo_col_gap = 6;
+    }
+
+    L.content_w = L.scr_w - 2 * L.margin;
+}
+
+// Anthropic brand palette — design tokens live in theme.h
+#define COL_BG        THEME_BG
+#define COL_PANEL     THEME_PANEL
+#define COL_TEXT      THEME_TEXT
+#define COL_DIM       THEME_DIM
+#define COL_ACCENT    THEME_ACCENT
+#define COL_GREEN     THEME_GREEN
+#define COL_AMBER     THEME_AMBER
+#define COL_RED       THEME_RED
+#define COL_BAR_BG    THEME_BAR_BG
+
+// ---- Usage screen widgets (single non-splash view) ----
+static lv_obj_t* usage_container;
+static lv_obj_t* lbl_title;
+// Clock fed by the daemon: base epoch (local wall-clock seconds) + the lv_tick at
+// which it landed, so the title ticks forward locally between 60s payloads.
+static long     clock_base_epoch = 0;
+static uint32_t clock_base_ms = 0;
+static int      clock_fmt = 24;   // 12 or 24, set from the daemon payload
+static int      clock_last_min = -1;   // last rendered minute; avoids redrawing the title every tick
+static lv_obj_t* usage_group;   // the two usage panels — shown when connected
+static lv_obj_t* pair_group;    // pairing hint — shown when disconnected
+static lv_obj_t* pair_l1;       // its three lines; the wording swaps when a host
+static lv_obj_t* pair_l2;       // keeps failing the handshake (ui_set_pairing_rejected)
+static lv_obj_t* pair_l3;
+static bool      pair_rejected = false;
+static lv_obj_t* bar_session;
+static lv_obj_t* lbl_session_pct;
+static lv_obj_t* lbl_session_label;
+static lv_obj_t* lbl_session_reset;
+static lv_obj_t* bar_weekly;
+static lv_obj_t* lbl_weekly_pct;
+static lv_obj_t* lbl_weekly_label;
+static lv_obj_t* lbl_weekly_reset;
+static lv_obj_t* panel_session = nullptr;
+static lv_obj_t* panel_weekly = nullptr;
+// Enterprise-only widgets inside panel_session
+static lv_obj_t* lbl_session_pct_sym = nullptr;  // "%" in smaller font
+static lv_obj_t* lbl_spending_desc = nullptr;     // "of your monthly budget"
+static lv_obj_t* lbl_spending_status = nullptr;   // "Under pace" / "On pace" / "Over pace"
+static lv_obj_t* lbl_anim;      // status line: connection state + whimsical idle
+
+// ---- Codex detail + combo screen ----
+// The three data screens share usage_container (title, status line, pairing
+// hint and idle view); each brings its own group, and update_view_state()
+// shows the one that belongs to the current page.
+// One provider's two windows as full-size gauges: bar panels, or rings on
+// round boards. The Claude view fills the single-name globals above from one.
+struct GaugePair {
+    lv_obj_t *panel_s, *pct_s, *label_s, *bar_s, *reset_s;
+    lv_obj_t *panel_w, *pct_w, *label_w, *bar_w, *reset_w;
+};
+static lv_obj_t* codex_group = nullptr;   // Codex detail
+static GaugePair codex_gp = {};
+static lv_obj_t* combo_group = nullptr;   // combo: both providers at once
+struct ComboBlock {
+    lv_obj_t* panel;
+    lv_obj_t* name;      // "Claude" / "Codex"
+    lv_obj_t* note;      // plan, or "no data"
+    lv_obj_t* label[2];  // "5h" / "7d"
+    lv_obj_t* bar[2];
+    lv_obj_t* pct[2];
+    lv_obj_t* reset[2];
+};
+static ComboBlock combo_claude = {}, combo_codex = {};
+static lv_obj_t* page_dots[3] = {};       // which of the three pages is up
+static int16_t   page_dots_y = -1;        // -1 = no room for them on this layout
+static UsageData claude_data = {};        // last live Claude reading, for the combo
+static CodexData codex_data = {};         // last Codex reading
+static uint32_t  last_codex_ms = 0;       // lv_tick when it landed
+static int       fresh_mask = -1;         // claude | codex << 1, as last rendered
+
+// ---- Battery indicator (shared, on top) ----
+static lv_obj_t* battery_img;
+static lv_obj_t* logo_img;
+// The corner: upstream's animated mascot on PSRAM boards (static still Clawd
+// in logo_img otherwise). With "ua" on, the host's state plays there in place
+// of the mascot's own usage-rate routine (splash_mascot_set_host_anim).
+static bool usage_creature_on = false;
+static char usage_creature_anim[24] = "";
+// Was der Host zuletzt als Zustand gemeldet hat ("" = keine Vorgabe). Treibt
+// neben dem Buddy auch die Fusszeile des Usage-Screens.
+static char host_anim[24] = "";
+// Anzeigemodus: 0 = immer Usage, 1 = immer Buddy, 2 = bei Aktivitaet kurz den
+// Buddy zeigen. Voreinstellung ist das bisherige Verhalten.
+static int  screen_mode = SCREEN_MODE_USAGE;
+static uint32_t auto_splash_until = 0;   // 0 = kein automatischer Rueckweg offen
+static uint32_t auto_splash_started = 0;  // nur fuers Protokoll: wie lange stand er wirklich
+// Sechseinhalb statt fuenf Sekunden: die ersten ein bis zwei davon gehen fuer
+// den Neuaufbau des Splash drauf (LVGL malt in Streifen), sichtbar animiert
+// wird also deutlich kuerzer als die Frist laeuft. Gemessen: 5003 ms Standzeit
+// fuehlten sich wie drei an.
+#define AUTO_SPLASH_MS 6500
+static lv_image_dsc_t battery_dscs[5];  // empty, low, medium, full, charging
+
+// ---- Live-data freshness → which usage sub-view to show ----
+// usage panels when data is flowing, an idle "Zzz" screen when the host is
+// connected but no usage update landed within DATA_FRESH_MS, the pairing hint
+// when BLE is down. Re-evaluated every loop in ui_tick_anim().
+static lv_obj_t* idle_group;            // the "Zzz" idle screen
+static uint32_t  last_data_ms = 0;      // lv_tick when the last valid usage update landed
+static bool      data_received = false; // any valid update since boot
+static bool      data_ok = true;        // last payload's ok flag; a {"ok":false} beat = "no fresh data"
+static int       view_state = -1;       // -1 unknown / 0 pair / 1 idle / 2 usage
+static const uint32_t DATA_FRESH_MS = 90000;  // usage counts as "live" within this window (daemon sends ~60s)
+
+static bool claude_fresh(void) {
+    return data_received && data_ok && (lv_tick_get() - last_data_ms) < DATA_FRESH_MS;
+}
+// Codex numbers ride on every payload, the "No data" beats included, so they
+// stay live while the Claude token is dead.
+static bool codex_fresh(void) {
+    return codex_data.valid && (lv_tick_get() - last_codex_ms) < DATA_FRESH_MS;
+}
+
+// ---- Shared ----
+static lv_image_dsc_t logo_dsc;
+static screen_t current_screen = SCREEN_USAGE;
+static screen_t prev_non_splash_screen = SCREEN_USAGE;   // the data page a tap returns to
+static bool     s_ble_connected = false;   // cached BLE connection state
+static uint32_t connected_at_ms = 0;       // when we last entered CONNECTED ("Connected" dwell)
+
+// Animation state
+static uint32_t anim_last_ms = 0;
+static uint8_t anim_spinner_idx = 0;
+static uint8_t anim_phase = 0;
+static uint8_t anim_msg_idx = 0;
+static uint32_t anim_msg_start = 0;
+#define ANIM_MSG_MS     4000
+
+static const char* const spinner_frames[] = {
+    "\xC2\xB7", "\xE2\x9C\xBB", "\xE2\x9C\xBD",
+    "\xE2\x9C\xB6", "\xE2\x9C\xB3", "\xE2\x9C\xA2",
+};
+#define SPINNER_COUNT 6
+#define SPINNER_PHASES (2 * (SPINNER_COUNT - 1))  // 10: ping-pong 0..5..0
+
+static const uint16_t spinner_ms[SPINNER_COUNT] = {
+    260, 130, 130, 130, 130, 260,
+};
+
+static const char* const anim_messages[] = {
+    "Accomplishing", "Elucidating", "Perusing",
+    "Actioning", "Enchanting", "Philosophising",
+    "Actualizing", "Envisioning", "Pondering",
+    "Baking", "Finagling", "Pontificating",
+    "Booping", "Flibbertigibbeting", "Processing",
+    "Brewing", "Forging", "Puttering",
+    "Calculating", "Forming", "Puzzling",
+    "Cerebrating", "Frolicking", "Reticulating",
+    "Channelling", "Generating", "Ruminating",
+    "Churning", "Germinating", "Scheming",
+    "Clauding", "Hatching", "Schlepping",
+    "Coalescing", "Herding", "Shimmying",
+    "Cogitating", "Honking", "Shucking",
+    "Combobulating", "Hustling", "Simmering",
+    "Computing", "Ideating", "Smooshing",
+    "Concocting", "Imagining", "Spelunking",
+    "Conjuring", "Incubating", "Spinning",
+    "Considering", "Inferring", "Stewing",
+    "Contemplating", "Jiving", "Sussing",
+    "Cooking", "Manifesting", "Synthesizing",
+    "Crafting", "Marinating", "Thinking",
+    "Creating", "Meandering", "Tinkering",
+    "Crunching", "Moseying", "Transmuting",
+    "Deciphering", "Mulling", "Unfurling",
+    "Deliberating", "Mustering", "Unravelling",
+    "Determining", "Musing", "Vibing",
+    "Discombobulating", "Noodling", "Wandering",
+    "Divining", "Percolating", "Whirring",
+    "Doing", "Wibbling",
+    "Effecting", "Wizarding",
+    "Working", "Wrangling",
+};
+#define ANIM_MSG_COUNT (sizeof(anim_messages) / sizeof(anim_messages[0]))
+
+static lv_color_t pct_color(float pct) {
+    if (pct >= 80.0f) return COL_RED;
+    if (pct >= 50.0f) return COL_AMBER;
+    return L.gauge_ok;
+}
+
+// The combo rows' short form: "45m", "4h05m", "6d23h"; "" when unknown.
+static void format_reset_short(int mins, char* buf, size_t len) {
+    if (mins < 0)         buf[0] = '\0';
+    else if (mins < 60)   snprintf(buf, len, "%dm", mins);
+    else if (mins < 1440) snprintf(buf, len, "%dh%02dm", mins / 60, mins % 60);
+    else                  snprintf(buf, len, "%dd%dh", mins / 1440, (mins % 1440) / 60);
+}
+
+static void format_reset_time(int mins, char* buf, size_t len) {
+    if (mins < 0) {
+        snprintf(buf, len, "---");
+    } else if (mins < 60) {
+        snprintf(buf, len, "Resets in %dm", mins);
+    } else if (mins < 1440) {
+        snprintf(buf, len, "Resets in %dh %dm", mins / 60, mins % 60);
+    } else {
+        snprintf(buf, len, "Resets in %dd %dh", mins / 1440, (mins % 1440) / 60);
+    }
+}
+
+// Forward decls — callbacks defined near ui_show_screen below
+static void global_click_cb(lv_event_t* e);
+static void apply_corner_creature(void);
+
+// ---- Touch as keys (BoardCaps.touch_keys) ----
+// Boards whose keys can't be reached map them onto the screen:
+//   tap        → toggle splash <-> usage, as everywhere
+//   double tap → touch_keys->double_tap
+//   hold       → touch_keys->hold_start at LVGL's long-press time, then
+//                touch_keys->hold_end(held_ms) on release
+// A single tap only acts once the double-tap window has passed, so a double
+// tap never flips the screen on its first half. A hold never counts as a tap
+// (SHORT_CLICKED isn't sent after a long press).
+#define DOUBLE_TAP_MS 300
+
+static const UiTouchKeys* touch_keys = nullptr;
+static lv_timer_t*        tap_timer = nullptr;
+static uint32_t           press_start_ms = 0;
+static bool               holding = false;
+
+void ui_set_touch_keys(const UiTouchKeys* keys) { touch_keys = keys; }
+
+// ---- Swipe between the data pages ----
+// Left / right turns the pages in a circle: combo -> Claude -> Codex -> combo
+// (left = forward). The Codex page is skipped while Codex has no numbers. On
+// the splash a swipe does nothing -- a tap is what leaves it.
+//
+// LVGL still sends CLICKED (and on the touch-keys path SHORT_CLICKED) when the
+// finger lifts after a gesture, so a swipe would also toggle the splash; the
+// flag swallows that one release. Reset on every new press.
+static bool swipe_consumed = false;
+
+static void swipe_page(int step) {
+    if (current_screen == SCREEN_SPLASH) return;
+    static const screen_t order[] = { SCREEN_USAGE, SCREEN_CLAUDE, SCREEN_CODEX };
+    const int n = 3;
+    int i = 0;
+    while (i < n && order[i] != current_screen) i++;
+    if (i == n) i = 0;
+    for (int tries = 0; tries < n; tries++) {
+        i = (i + step + n) % n;
+        if (order[i] == SCREEN_CODEX && !codex_fresh()) continue;
+        break;
+    }
+    auto_splash_until = 0;   // whoever turns pages by hand stays there
+    if (order[i] != current_screen) ui_show_screen(order[i]);
+}
+
+// True when the event was a gesture (handled here).
+static bool handle_swipe_event(lv_event_t* e) {
+    const lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_PRESSED) {
+        swipe_consumed = false;
+        return false;
+    }
+    if (code != LV_EVENT_GESTURE) return false;
+    swipe_consumed = true;
+    lv_indev_t* indev = lv_indev_active();
+    if (!indev) return true;
+    const lv_dir_t dir = lv_indev_get_gesture_dir(indev);
+    if (dir == LV_DIR_LEFT)       swipe_page(+1);
+    else if (dir == LV_DIR_RIGHT) swipe_page(-1);
+    return true;
+}
+
+// Plain-tap boards: tap toggles the splash, unless the press was a swipe.
+static void screen_event_cb(lv_event_t* e) {
+    if (handle_swipe_event(e)) return;
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    if (swipe_consumed) {
+        swipe_consumed = false;
+        return;
+    }
+    global_click_cb(e);
+}
+
+static void tap_timer_cb(lv_timer_t* t) {
+    (void)t;
+    tap_timer = nullptr;   // one-shot; LVGL deletes it after this call
+    ui_toggle_splash();
+}
+
+static void touch_key_cb(lv_event_t* e) {
+    if (handle_swipe_event(e)) return;
+    switch (lv_event_get_code(e)) {
+    case LV_EVENT_PRESSED:
+        press_start_ms = lv_tick_get();
+        break;
+    case LV_EVENT_SHORT_CLICKED:
+        if (swipe_consumed) break;             // the release after a swipe
+        if (tap_timer) {                       // second tap inside the window
+            lv_timer_delete(tap_timer);
+            tap_timer = nullptr;
+            if (touch_keys && touch_keys->double_tap) touch_keys->double_tap();
+        } else {
+            tap_timer = lv_timer_create(tap_timer_cb, DOUBLE_TAP_MS, NULL);
+            lv_timer_set_repeat_count(tap_timer, 1);
+        }
+        break;
+    case LV_EVENT_LONG_PRESSED:
+        if (swipe_consumed) break;             // a slow swipe is not a hold
+        holding = true;
+        if (touch_keys && touch_keys->hold_start) touch_keys->hold_start();
+        break;
+    case LV_EVENT_LONG_PRESSED_REPEAT:
+        // Lets the pairing gesture report its progress while the finger is
+        // still down — hold_end alone comes too late to say "release now".
+        if (holding && touch_keys && touch_keys->hold_tick)
+            touch_keys->hold_tick(lv_tick_get() - press_start_ms);
+        break;
+    case LV_EVENT_RELEASED:
+    case LV_EVENT_PRESS_LOST:
+        if (holding) {
+            holding = false;
+            if (touch_keys && touch_keys->hold_end)
+                touch_keys->hold_end(lv_tick_get() - press_start_ms);
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+static void attach_touch_actions(lv_obj_t* obj) {
+    // Gestures from the panels and labels inside stop here. Every LVGL child
+    // passes gestures up by default, so without this they would sail past
+    // the container to the screen object and never reach the handler.
+    lv_obj_clear_flag(obj, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    if (board_caps().touch_keys) {
+        lv_obj_add_event_cb(obj, touch_key_cb, LV_EVENT_ALL, NULL);
+    } else {
+        lv_obj_add_event_cb(obj, screen_event_cb, LV_EVENT_ALL, NULL);
+    }
+}
+
+static lv_obj_t* make_panel(lv_obj_t* parent, int x, int y, int w, int h) {
+    lv_obj_t* panel = lv_obj_create(parent);
+    lv_obj_set_pos(panel, x, y);
+    lv_obj_set_size(panel, w, h);
+    lv_obj_set_style_bg_color(panel, COL_PANEL, 0);
+    lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(panel, 8, 0);
+    lv_obj_set_style_border_width(panel, 0, 0);
+    lv_obj_set_style_pad_left(panel, L.panel_pad_x, 0);
+    lv_obj_set_style_pad_right(panel, L.panel_pad_x, 0);
+    lv_obj_set_style_pad_top(panel, L.panel_pad_y, 0);
+    lv_obj_set_style_pad_bottom(panel, L.panel_pad_y, 0);
+    lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(panel, LV_OBJ_FLAG_EVENT_BUBBLE);
+    return panel;
+}
+
+static lv_obj_t* make_bar(lv_obj_t* parent, int x, int y, int w, int h) {
+    lv_obj_t* bar = lv_bar_create(parent);
+    lv_obj_set_pos(bar, x, y);
+    lv_obj_set_size(bar, w, h);
+    lv_bar_set_range(bar, 0, 100);
+    lv_bar_set_value(bar, 0, LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(bar, COL_BAR_BG, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_radius(bar, 6, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(bar, COL_GREEN, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(bar, 6, LV_PART_INDICATOR);
+    return bar;
+}
+
+// Ring gauge for round panels — the counterpart of make_bar(). Not clickable,
+// so a tap on it still reaches the screen-toggle handler instead of dragging
+// the value.
+static lv_obj_t* make_ring(lv_obj_t* parent, int diameter) {
+    lv_obj_t* arc = lv_arc_create(parent);
+    lv_obj_set_size(arc, diameter, diameter);
+    lv_obj_align(arc, LV_ALIGN_CENTER, 0, 0);
+    lv_arc_set_rotation(arc, 0);
+    lv_arc_set_bg_angles(arc, L.ring_start, L.ring_end);
+    lv_arc_set_range(arc, 0, 100);
+    lv_arc_set_value(arc, 0);
+    lv_obj_remove_style(arc, NULL, LV_PART_KNOB);
+    lv_obj_clear_flag(arc, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(arc, LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_set_style_pad_all(arc, 0, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(arc, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_arc_width(arc, L.ring_w, LV_PART_MAIN);
+    lv_obj_set_style_arc_width(arc, L.ring_w, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(arc, L.gauge_track, LV_PART_MAIN);
+    lv_obj_set_style_arc_color(arc, L.gauge_ok, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_rounded(arc, true, LV_PART_MAIN);
+    lv_obj_set_style_arc_rounded(arc, true, LV_PART_INDICATOR);
+    return arc;
+}
+
+// Quarter marks for the ring gauges: notches in the background colour cut
+// through both rings at 25 / 50 / 75 %, so a small fill can be read against
+// the scale (the sweep is 270°, which makes 12 % look shorter than a clock
+// face would suggest). 0 and 100 % are the ring ends. lv_line keeps a pointer
+// to its points, hence the static array.
+static lv_point_precise_t ring_tick_pts[3][2];
+
+static void add_ring_ticks(lv_obj_t* parent) {
+    if (L.ring_tick_w <= 0) return;
+    const float c     = L.scr_w / 2.0f;   // round panels are square
+    const float r_out = L.ring_d / 2.0f + 1;
+    const float r_in  = L.ring_d / 2.0f - 2 * L.ring_w - L.ring_gap - 1;
+    const int   sweep = (L.ring_end - L.ring_start + 360) % 360;
+    for (int i = 0; i < 3; i++) {
+        const float rad = (L.ring_start + sweep * (i + 1) / 4.0f) * (float)M_PI / 180.0f;
+        ring_tick_pts[i][0].x = (lv_value_precise_t)lroundf(c + r_in  * cosf(rad));
+        ring_tick_pts[i][0].y = (lv_value_precise_t)lroundf(c + r_in  * sinf(rad));
+        ring_tick_pts[i][1].x = (lv_value_precise_t)lroundf(c + r_out * cosf(rad));
+        ring_tick_pts[i][1].y = (lv_value_precise_t)lroundf(c + r_out * sinf(rad));
+        lv_obj_t* tick = lv_line_create(parent);
+        lv_line_set_points(tick, ring_tick_pts[i], 2);
+        lv_obj_set_pos(tick, 0, 0);
+        lv_obj_set_style_line_width(tick, L.ring_tick_w, 0);
+        lv_obj_set_style_line_color(tick, COL_BG, 0);
+        lv_obj_clear_flag(tick, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_flag(tick, LV_OBJ_FLAG_EVENT_BUBBLE);
+
+        // The mark's value, small and just inside the inner ring.
+        lv_obj_t* lbl = lv_label_create(parent);
+        lv_label_set_text_fmt(lbl, "%d", 25 * (i + 1));
+        lv_obj_set_style_text_font(lbl, L.ring_label_font, 0);
+        lv_obj_set_style_text_color(lbl, COL_DIM, 0);
+        lv_obj_align(lbl, LV_ALIGN_CENTER,
+                     (int32_t)lroundf(L.ring_label_r * cosf(rad)),
+                     (int32_t)lroundf(L.ring_label_r * sinf(rad)));
+    }
+}
+
+// Fill level + colour of a usage gauge — a bar on rectangular panels, a ring
+// on round ones. Rings keep the single fill colour make_ring() gave them
+// (the level is read off the scale marks and the number in the middle), so
+// `color` only applies to bars.
+static void set_gauge(lv_obj_t* gauge, int value, lv_color_t color) {
+    if (L.round) {
+        lv_arc_set_value(gauge, value);
+    } else {
+        lv_bar_set_value(gauge, value, LV_ANIM_ON);
+        lv_obj_set_style_bg_color(gauge, color, LV_PART_INDICATOR);
+    }
+}
+
+static void init_icon_dsc_rgb565a8(lv_image_dsc_t* dsc, int w, int h, const uint8_t* data) {
+    dsc->header.w = w;
+    dsc->header.h = h;
+    dsc->header.cf = LV_COLOR_FORMAT_RGB565A8;
+    dsc->header.stride = w * 2;
+    dsc->data = data;
+    dsc->data_size = w * h * 3;
+}
+
+static lv_obj_t* make_pill(lv_obj_t* parent, const char* text) {
+    lv_obj_t* lbl = lv_label_create(parent);
+    lv_label_set_text(lbl, text);
+    lv_obj_set_style_text_font(lbl, L.pill_font, 0);
+    lv_obj_set_style_text_color(lbl, COL_TEXT, 0);
+    lv_obj_set_style_bg_color(lbl, COL_BAR_BG, 0);
+    lv_obj_set_style_bg_opa(lbl, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(lbl, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_pad_left(lbl, L.pill_pad_x, 0);
+    lv_obj_set_style_pad_right(lbl, L.pill_pad_x, 0);
+    lv_obj_set_style_pad_top(lbl, L.pill_pad_y, 0);
+    lv_obj_set_style_pad_bottom(lbl, L.pill_pad_y, 0);
+    return lbl;
+}
+
+static void init_battery_icons(void) {
+    if (L.small_icons) {
+        init_icon_dsc_rgb565a8(&battery_dscs[0], ICON_BATTERY_SMALL_W, ICON_BATTERY_SMALL_H, icon_battery_small_data);
+        init_icon_dsc_rgb565a8(&battery_dscs[1], ICON_BATTERY_LOW_SMALL_W, ICON_BATTERY_LOW_SMALL_H, icon_battery_low_small_data);
+        init_icon_dsc_rgb565a8(&battery_dscs[2], ICON_BATTERY_MEDIUM_SMALL_W, ICON_BATTERY_MEDIUM_SMALL_H, icon_battery_medium_small_data);
+        init_icon_dsc_rgb565a8(&battery_dscs[3], ICON_BATTERY_FULL_SMALL_W, ICON_BATTERY_FULL_SMALL_H, icon_battery_full_small_data);
+        init_icon_dsc_rgb565a8(&battery_dscs[4], ICON_BATTERY_CHARGING_SMALL_W, ICON_BATTERY_CHARGING_SMALL_H, icon_battery_charging_small_data);
+        return;
+    }
+    init_icon_dsc_rgb565a8(&battery_dscs[0], ICON_BATTERY_W, ICON_BATTERY_H, icon_battery_data);
+    init_icon_dsc_rgb565a8(&battery_dscs[1], ICON_BATTERY_LOW_W, ICON_BATTERY_LOW_H, icon_battery_low_data);
+    init_icon_dsc_rgb565a8(&battery_dscs[2], ICON_BATTERY_MEDIUM_W, ICON_BATTERY_MEDIUM_H, icon_battery_medium_data);
+    init_icon_dsc_rgb565a8(&battery_dscs[3], ICON_BATTERY_FULL_W, ICON_BATTERY_FULL_H, icon_battery_full_data);
+    init_icon_dsc_rgb565a8(&battery_dscs[4], ICON_BATTERY_CHARGING_W, ICON_BATTERY_CHARGING_H, icon_battery_charging_data);
+}
+
+// ======== Usage Screen ========
+
+static lv_obj_t* make_usage_panel(lv_obj_t* parent, int y, const char* pill_text,
+                                  lv_obj_t** out_pct, lv_obj_t** out_pill,
+                                  lv_obj_t** out_bar, lv_obj_t** out_reset) {
+    lv_obj_t* panel = make_panel(parent, L.margin, y, L.content_w, L.usage_panel_h);
+
+    *out_pct = lv_label_create(panel);
+    lv_label_set_text(*out_pct, "---%");
+    lv_obj_set_style_text_font(*out_pct, L.pct_font, 0);
+    lv_obj_set_style_text_color(*out_pct, COL_TEXT, 0);
+    lv_obj_set_pos(*out_pct, 0, 0);
+
+    *out_pill = make_pill(panel, pill_text);
+    lv_obj_align(*out_pill, LV_ALIGN_TOP_RIGHT, 0, 1);
+
+    *out_bar = make_bar(panel, 0, L.usage_bar_y,
+                        L.content_w - 2 * L.panel_pad_x, L.bar_h);
+
+    *out_reset = lv_label_create(panel);
+    lv_label_set_text(*out_reset, "---");
+    lv_obj_set_style_text_font(*out_reset, L.reset_font, 0);
+    lv_obj_set_style_text_color(*out_reset, COL_DIM, 0);
+    lv_obj_set_pos(*out_reset, 0, L.usage_reset_y);
+
+    return panel;
+}
+
+// Transparent full-screen layer, so the round widgets can be shown / hidden
+// as a unit exactly like the bar panels they replace.
+static lv_obj_t* make_layer(lv_obj_t* parent) {
+    lv_obj_t* layer = lv_obj_create(parent);
+    lv_obj_set_size(layer, L.scr_w, L.scr_h);
+    lv_obj_set_pos(layer, 0, 0);
+    lv_obj_set_style_bg_opa(layer, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(layer, 0, 0);
+    lv_obj_set_style_pad_all(layer, 0, 0);
+    lv_obj_clear_flag(layer, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(layer, LV_OBJ_FLAG_EVENT_BUBBLE);
+    return layer;
+}
+
+static lv_obj_t* make_centered_label(lv_obj_t* parent, const char* text,
+                                     const lv_font_t* font, lv_color_t color, int y) {
+    lv_obj_t* lbl = lv_label_create(parent);
+    lv_label_set_text(lbl, text);
+    lv_obj_set_style_text_font(lbl, font, 0);
+    lv_obj_set_style_text_color(lbl, color, 0);
+    lv_obj_align(lbl, LV_ALIGN_CENTER, 0, y);
+    return lbl;
+}
+
+// One provider's two windows at full size: two bar panels, or on round
+// panels two concentric rings with the numbers stacked in the middle (the
+// panels become transparent layers, the pills plain captions). Claude's and
+// Codex's detail screens are both built from this.
+static void build_gauge_pair(lv_obj_t* parent, GaugePair* g,
+                             const char* cap_s, const char* cap_w) {
+    if (!L.round) {
+        g->panel_s = make_usage_panel(parent, L.content_y, cap_s,
+                                      &g->pct_s, &g->label_s, &g->bar_s, &g->reset_s);
+        g->panel_w = make_usage_panel(parent,
+                                      L.content_y + L.usage_panel_h + L.usage_panel_gap, cap_w,
+                                      &g->pct_w, &g->label_w, &g->bar_w, &g->reset_w);
+        return;
+    }
+
+    g->panel_s = make_layer(parent);
+    g->panel_w = make_layer(parent);
+
+    g->bar_s = make_ring(g->panel_s, L.ring_d);
+    g->bar_w = make_ring(g->panel_w, L.ring_d - 2 * (L.ring_w + L.ring_gap));
+    add_ring_ticks(g->panel_w);   // last layer, so the notches cut both rings
+
+    g->label_s = make_centered_label(g->panel_s, cap_s, L.pill_font, COL_DIM, L.r_s_label_y);
+    g->pct_s   = make_centered_label(g->panel_s, "---%", L.pct_font, COL_TEXT, L.r_s_pct_y);
+    g->reset_s = make_centered_label(g->panel_s, "---", L.reset_font, COL_DIM, L.r_s_reset_y);
+
+    // Weekly caption and number share one row, bottom-aligned so the two
+    // font sizes read as one line.
+    lv_obj_t* row = lv_obj_create(g->panel_w);
+    lv_obj_set_size(row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
+    lv_obj_set_style_pad_all(row, 0, 0);
+    lv_obj_set_style_pad_column(row, 8, 0);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_END);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(row, LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_align(row, LV_ALIGN_CENTER, 0, L.r_w_row_y);
+
+    g->label_w = lv_label_create(row);
+    lv_label_set_text(g->label_w, cap_w);
+    lv_obj_set_style_text_font(g->label_w, L.pill_font, 0);
+    lv_obj_set_style_text_color(g->label_w, COL_DIM, 0);
+    lv_obj_set_style_pad_bottom(g->label_w, 3, 0);   // baseline, not bottom edge
+
+    g->pct_w = lv_label_create(row);
+    lv_label_set_text(g->pct_w, "---%");
+    lv_obj_set_style_text_font(g->pct_w, L.week_pct_font, 0);
+    lv_obj_set_style_text_color(g->pct_w, COL_TEXT, 0);
+
+    g->reset_w = make_centered_label(g->panel_w, "---", L.reset_font, COL_DIM, L.r_w_reset_y);
+}
+
+// Plain 5h / weekly numbers into a gauge pair (Codex; Claude's own view also
+// knows the Enterprise variant and keeps its code in ui_update()).
+static void fill_gauge_pair(const GaugePair* g, int s_pct, int s_reset, int w_pct, int w_reset) {
+    char buf[48];
+    lv_label_set_text_fmt(g->pct_s, "%d%%", s_pct);
+    set_gauge(g->bar_s, s_pct, pct_color((float)s_pct));
+    format_reset_time(s_reset, buf, sizeof(buf));
+    lv_label_set_text(g->reset_s, buf);
+    lv_label_set_text_fmt(g->pct_w, "%d%%", w_pct);
+    set_gauge(g->bar_w, w_pct, pct_color((float)w_pct));
+    format_reset_time(w_reset, buf, sizeof(buf));
+    lv_label_set_text(g->reset_w, buf);
+}
+
+// ---- Combo screen ----
+
+static lv_obj_t* make_combo_label(lv_obj_t* parent, const char* text, const lv_font_t* font,
+                                  lv_color_t color) {
+    lv_obj_t* lbl = lv_label_create(parent);
+    lv_label_set_text(lbl, text);
+    lv_obj_set_style_text_font(lbl, font, 0);
+    lv_obj_set_style_text_color(lbl, color, 0);
+    return lbl;
+}
+
+// Advance width of a short ASCII string, side bearings included.
+static int text_w(const lv_font_t* font, const char* txt) {
+    int w = 0;
+    for (const char* p = txt; *p; p++)
+        w += lv_font_get_glyph_width(font, (uint32_t)p[0], (uint32_t)p[1]);
+    return w;
+}
+
+static int max_text_w(const lv_font_t* font, const char* const* txts, int n) {
+    int w = 0;
+    for (int i = 0; i < n; i++) {
+        const int t = text_w(font, txts[i]);
+        if (t > w) w = t;
+    }
+    return w;
+}
+
+static void build_combo_block(lv_obj_t* parent, int y, const char* name, ComboBlock* b) {
+    b->panel = make_panel(parent, L.combo_x, y, L.combo_w, L.combo_h);
+    lv_obj_set_style_pad_left(b->panel, L.combo_pad_x, 0);
+    lv_obj_set_style_pad_right(b->panel, L.combo_pad_x, 0);
+    lv_obj_set_style_pad_top(b->panel, L.combo_pad_y, 0);
+    lv_obj_set_style_pad_bottom(b->panel, L.combo_pad_y, 0);
+
+    b->name = make_combo_label(b->panel, name, L.combo_head_font, COL_TEXT);
+    lv_obj_set_pos(b->name, 0, 0);
+    // The note sits on the name's baseline, right-aligned.
+    const int head_h = lv_font_get_line_height(L.combo_head_font);
+    const int line_h = lv_font_get_line_height(L.combo_font);
+    b->note = make_combo_label(b->panel, "", L.combo_font, COL_DIM);
+    lv_obj_align(b->note, LV_ALIGN_TOP_RIGHT, 0, head_h - line_h);
+
+    // Columns sized on the widest thing each can show ("$" is Enterprise's
+    // spending row; the reset slot also holds its date, e.g. "Aug 15").
+    static const char* const labels[] = { "5h", "7d", "$" };
+    static const char* const pcts[]   = { "100%" };
+    static const char* const resets[] = { "23h59m", "6d23h", "Sep 30" };
+    const int label_w = max_text_w(L.combo_font, labels, 3);
+    const int pct_w   = max_text_w(L.combo_font, pcts, 1) + 2;
+    const int reset_w = max_text_w(L.combo_font, resets, 3) + 2;
+    const int inner_w = L.combo_w - 2 * L.combo_pad_x;
+    const int bar_x   = label_w + L.combo_col_gap;
+    const int bar_w   = inner_w - bar_x - 2 * L.combo_col_gap - pct_w - reset_w;
+    for (int i = 0; i < 2; i++) {
+        const int ry = i ? L.combo_row2_y : L.combo_row1_y;
+        b->label[i] = make_combo_label(b->panel, i ? "7d" : "5h", L.combo_font, COL_DIM);
+        lv_obj_set_pos(b->label[i], 0, ry);
+
+        b->bar[i] = make_bar(b->panel, bar_x, ry + (line_h - L.combo_bar_h) / 2, bar_w, L.combo_bar_h);
+        lv_obj_set_style_radius(b->bar[i], L.combo_bar_h / 2, LV_PART_MAIN);
+        lv_obj_set_style_radius(b->bar[i], L.combo_bar_h / 2, LV_PART_INDICATOR);
+        lv_obj_add_flag(b->bar[i], LV_OBJ_FLAG_EVENT_BUBBLE);
+
+        b->pct[i] = make_combo_label(b->panel, "--", L.combo_font, COL_TEXT);
+        lv_obj_set_width(b->pct[i], pct_w);
+        lv_obj_set_style_text_align(b->pct[i], LV_TEXT_ALIGN_RIGHT, 0);
+        lv_obj_set_pos(b->pct[i], bar_x + bar_w + L.combo_col_gap, ry);
+
+        b->reset[i] = make_combo_label(b->panel, "", L.combo_font, COL_DIM);
+        lv_obj_set_width(b->reset[i], reset_w);
+        lv_obj_set_style_text_align(b->reset[i], LV_TEXT_ALIGN_RIGHT, 0);
+        lv_obj_set_pos(b->reset[i], inner_w - reset_w, ry);
+    }
+}
+
+// Same warning levels as the detail bars, but always green below them --
+// the round layout's detail rings are orange, these stay bars everywhere.
+static lv_color_t combo_color(int pct) {
+    if (pct >= 80) return COL_RED;
+    if (pct >= 50) return COL_AMBER;
+    return COL_GREEN;
+}
+
+// pct < 0 = no number for this row: dashes, empty bar.
+static void set_combo_row(const ComboBlock* b, int i, int pct, const char* reset) {
+    if (pct < 0) {
+        lv_label_set_text(b->pct[i], "--");
+        lv_bar_set_value(b->bar[i], 0, LV_ANIM_OFF);
+    } else {
+        lv_label_set_text_fmt(b->pct[i], "%d%%", pct);
+        lv_bar_set_value(b->bar[i], pct, LV_ANIM_ON);
+        lv_obj_set_style_bg_color(b->bar[i], combo_color(pct), LV_PART_INDICATOR);
+    }
+    lv_label_set_text(b->reset[i], reset);
+}
+
+static void set_combo_row_visible(const ComboBlock* b, int i, bool on) {
+    lv_obj_t* parts[] = { b->label[i], b->bar[i], b->pct[i], b->reset[i] };
+    for (lv_obj_t* o : parts) {
+        if (on) lv_obj_clear_flag(o, LV_OBJ_FLAG_HIDDEN);
+        else    lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+// Redraw both combo panels from the last readings. A provider without live
+// numbers keeps its panel, with dashes and "no data", so the screen never
+// pretends a stale reading is current.
+static void render_combo(void) {
+    if (!combo_group) return;
+    char buf[16];
+
+    if (claude_fresh()) {
+        const UsageData* d = &claude_data;
+        lv_label_set_text(combo_claude.note, "");
+        if (d->enterprise) {
+            // One spending number instead of two windows; the reset date
+            // takes the reset slot.
+            lv_label_set_text(combo_claude.label[0], "$");
+            set_combo_row(&combo_claude, 0, (int)(d->session_pct + 0.5f), d->reset_date);
+            set_combo_row_visible(&combo_claude, 1, false);
+        } else {
+            lv_label_set_text(combo_claude.label[0], "5h");
+            format_reset_short(d->session_reset_mins, buf, sizeof(buf));
+            set_combo_row(&combo_claude, 0, (int)(d->session_pct + 0.5f), buf);
+            set_combo_row_visible(&combo_claude, 1, true);
+            format_reset_short(d->weekly_reset_mins, buf, sizeof(buf));
+            set_combo_row(&combo_claude, 1, (int)(d->weekly_pct + 0.5f), buf);
+        }
+    } else {
+        lv_label_set_text(combo_claude.note, "no data");
+        lv_label_set_text(combo_claude.label[0], "5h");
+        set_combo_row_visible(&combo_claude, 1, true);
+        set_combo_row(&combo_claude, 0, -1, "");
+        set_combo_row(&combo_claude, 1, -1, "");
+    }
+
+    if (codex_fresh()) {
+        const CodexData* c = &codex_data;
+        lv_label_set_text(combo_codex.note, c->plan);
+        format_reset_short(c->session_reset_mins, buf, sizeof(buf));
+        set_combo_row(&combo_codex, 0, c->session_pct, buf);
+        format_reset_short(c->weekly_reset_mins, buf, sizeof(buf));
+        set_combo_row(&combo_codex, 1, c->weekly_pct, buf);
+    } else {
+        lv_label_set_text(combo_codex.note, "no data");
+        set_combo_row(&combo_codex, 0, -1, "");
+        set_combo_row(&combo_codex, 1, -1, "");
+    }
+    // The note's width changed; keep it flush right.
+    const int head_h = lv_font_get_line_height(L.combo_head_font);
+    const int line_h = lv_font_get_line_height(L.combo_font);
+    lv_obj_align(combo_claude.note, LV_ALIGN_TOP_RIGHT, 0, head_h - line_h);
+    lv_obj_align(combo_codex.note, LV_ALIGN_TOP_RIGHT, 0, head_h - line_h);
+}
+
+// ---- Page dots ----
+// Three small dots between the panels and the status line say which page is
+// up and that there are more. Skipped where the layout has no room (round
+// panels: the rings run all the way down).
+static void build_page_dots(lv_obj_t* parent) {
+    if (L.round) return;
+    const int d = L.small_icons ? 4 : 6;
+    const int panels_bottom = L.content_y + 2 * L.usage_panel_h + L.usage_panel_gap;
+    const int status_top = L.scr_h + L.anim_y - lv_font_get_line_height(L.anim_font);
+    if (status_top - panels_bottom < d + 2) return;
+    page_dots_y = (panels_bottom + status_top) / 2 - d / 2;
+    for (int i = 0; i < 3; i++) {
+        lv_obj_t* dot = lv_obj_create(parent);
+        lv_obj_set_size(dot, d, d);
+        lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_border_width(dot, 0, 0);
+        lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
+        lv_obj_clear_flag(dot, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_clear_flag(dot, LV_OBJ_FLAG_SCROLLABLE);
+        page_dots[i] = dot;
+    }
+}
+
+// Highlight the current page; the Codex dot goes away while Codex has no
+// numbers, since swiping skips that page then.
+static void update_page_dots(screen_t page, bool visible) {
+    if (page_dots_y < 0) return;
+    const int d = L.small_icons ? 4 : 6;
+    const int step = d * 2 + 2;
+    const int n = codex_fresh() ? 3 : 2;
+    const screen_t pages[3] = { SCREEN_USAGE, SCREEN_CLAUDE, SCREEN_CODEX };
+    const int x0 = (L.scr_w - ((n - 1) * step + d)) / 2;
+    for (int i = 0; i < 3; i++) {
+        if (!visible || i >= n) {
+            lv_obj_add_flag(page_dots[i], LV_OBJ_FLAG_HIDDEN);
+            continue;
+        }
+        lv_obj_clear_flag(page_dots[i], LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_pos(page_dots[i], x0 + i * step, page_dots_y);
+        lv_obj_set_style_bg_color(page_dots[i], pages[i] == page ? COL_TEXT : COL_BAR_BG, 0);
+    }
+}
+
+// Pairing hint — shown when disconnected so the screen isn't empty and the
+// user knows how to (re)pair. Wording matches the 3-second release gesture.
+static void build_pair_group(lv_obj_t* parent) {
+    pair_group = lv_obj_create(parent);
+    lv_obj_set_size(pair_group, L.scr_w, L.scr_h - L.content_y);
+    lv_obj_set_pos(pair_group, 0, L.content_y);
+    lv_obj_set_style_bg_opa(pair_group, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(pair_group, 0, 0);
+    lv_obj_set_style_pad_all(pair_group, 0, 0);
+    lv_obj_clear_flag(pair_group, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(pair_group, LV_OBJ_FLAG_EVENT_BUBBLE);
+
+    pair_l1 = lv_label_create(pair_group);
+    lv_label_set_text(pair_l1, "To pair");
+    lv_obj_set_style_text_font(pair_l1, L.bt_status_font, 0);
+    lv_obj_set_style_text_color(pair_l1, COL_TEXT, 0);
+    lv_obj_align(pair_l1, LV_ALIGN_TOP_MID, 0, L.pair_y1);
+
+    pair_l2 = lv_label_create(pair_group);
+    const char* key = board_caps().pair_key ? board_caps().pair_key : "the power button";
+    lv_label_set_text_fmt(pair_l2, "hold %s", key);
+    lv_obj_set_style_text_font(pair_l2, L.bt_device_font, 0);
+    lv_obj_set_style_text_color(pair_l2, COL_DIM, 0);
+    lv_obj_align(pair_l2, LV_ALIGN_TOP_MID, 0, L.pair_y2);
+
+    pair_l3 = lv_label_create(pair_group);
+    lv_label_set_text(pair_l3, "for 3 seconds, then release");
+    lv_obj_set_style_text_font(pair_l3, L.bt_device_font, 0);
+    lv_obj_set_style_text_color(pair_l3, COL_DIM, 0);
+    lv_obj_align(pair_l3, LV_ALIGN_TOP_MID, 0, L.pair_y3);
+
+    lv_obj_add_flag(pair_group, LV_OBJ_FLAG_HIDDEN);  // ui_update_ble_status decides
+}
+
+// ---- Hold-to-pair overlay ----
+// Lives on the shared screen above both the usage view and the splash, because
+// the gesture works from either. Only the pair_group hint below is tied to the
+// usage view; this one floats.
+static lv_obj_t*   pair_toast = nullptr;
+static lv_obj_t*   pair_toast_lbl = nullptr;
+static lv_timer_t* pair_toast_timer = nullptr;
+static pair_ui_t   pair_ui_state = PAIR_UI_NONE;
+
+static void pair_toast_dismiss(lv_timer_t* t) {
+    if (t) lv_timer_pause(t);
+    if (!pair_toast) return;
+    lv_obj_add_flag(pair_toast, LV_OBJ_FLAG_HIDDEN);
+    pair_ui_state = PAIR_UI_NONE;
+    // Same reason the charge overlay does it: the splash repaints only cells
+    // that changed, so whatever this covered would stay black until the
+    // creature happens to move through it.
+    splash_request_full_redraw();
+}
+
+static void build_pair_toast(lv_obj_t* parent) {
+    pair_toast = lv_obj_create(parent);
+    // Narrower than the content column on purpose: the longer states then wrap
+    // to two lines instead of running edge to edge, which on the 240 px board
+    // is the difference between a message and a stripe.
+    lv_obj_set_width(pair_toast, L.scr_w - 4 * L.margin);
+    lv_obj_set_height(pair_toast, LV_SIZE_CONTENT);
+    lv_obj_align(pair_toast, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_bg_color(pair_toast, COL_PANEL, 0);
+    lv_obj_set_style_bg_opa(pair_toast, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(pair_toast, L.margin / 2, 0);
+    lv_obj_set_style_border_width(pair_toast, 2, 0);
+    lv_obj_set_style_border_color(pair_toast, COL_ACCENT, 0);
+    lv_obj_set_style_pad_all(pair_toast, L.margin, 0);
+    lv_obj_clear_flag(pair_toast, LV_OBJ_FLAG_SCROLLABLE);
+    // Transparent to touch, like the charge overlay: it sits above the screen
+    // that owns the gestures, and on the Knob-1.8 the screen *is* the keyboard
+    // — a lingering "Ready to connect" would otherwise swallow the next tap.
+    lv_obj_clear_flag(pair_toast, LV_OBJ_FLAG_CLICKABLE);
+
+    pair_toast_lbl = lv_label_create(pair_toast);
+    lv_label_set_long_mode(pair_toast_lbl, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(pair_toast_lbl, lv_pct(100));
+    lv_obj_set_style_text_align(pair_toast_lbl, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(pair_toast_lbl, L.bt_device_font, 0);
+    lv_label_set_text(pair_toast_lbl, "");
+
+    lv_obj_add_flag(pair_toast, LV_OBJ_FLAG_HIDDEN);
+}
+
+// Idle "Zzz" screen — shown when the host is connected but no usage update has
+// landed recently (token expired, daemon down, host asleep…). Full-screen, like
+// the pairing hint, so we never render hours-old numbers as if they were live.
+static void build_idle_group(lv_obj_t* parent) {
+    idle_group = lv_obj_create(parent);
+    lv_obj_set_size(idle_group, L.scr_w, L.scr_h - L.content_y);
+    lv_obj_set_pos(idle_group, 0, L.content_y);
+    lv_obj_set_style_bg_opa(idle_group, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(idle_group, 0, 0);
+    lv_obj_set_style_pad_all(idle_group, 0, 0);
+    lv_obj_clear_flag(idle_group, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(idle_group, LV_OBJ_FLAG_EVENT_BUBBLE);
+
+    // A shrunk-down resting creature (the official cloud-ride animation)
+    // sits between the header and the status line; the animated "Listening…"
+    // status line carries the words, so no extra text is needed here.
+    lv_obj_t* creature = splash_mini_create(idle_group, "cloud", L.idle_px);
+    if (creature) lv_obj_align(creature, LV_ALIGN_CENTER, 0, -20);
+
+    lv_obj_add_flag(idle_group, LV_OBJ_FLAG_HIDDEN);  // update_view_state decides
+}
+
+static void init_usage_screen(lv_obj_t* scr) {
+    usage_container = lv_obj_create(scr);
+    lv_obj_set_size(usage_container, L.scr_w, L.scr_h);
+    lv_obj_set_pos(usage_container, 0, 0);
+    lv_obj_set_style_bg_opa(usage_container, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(usage_container, 0, 0);
+    lv_obj_set_style_pad_all(usage_container, 0, 0);
+    lv_obj_clear_flag(usage_container, LV_OBJ_FLAG_SCROLLABLE);
+    attach_touch_actions(usage_container);
+
+    lbl_title = lv_label_create(usage_container);
+    lv_label_set_text(lbl_title, "Usage");
+    lv_obj_set_style_text_font(lbl_title, L.title_font, 0);
+    lv_obj_set_style_text_color(lbl_title, COL_TEXT, 0);
+    // The nudge balances the corner logo on the left; smaller on small
+    // screens where the logo is 40px and the battery icon sits closer.
+    lv_obj_align(lbl_title, LV_ALIGN_TOP_MID, L.title_nudge, L.title_y);
+
+    // Usage panels (shown when connected) live in a transparent full-size group
+    // so they can be toggled against the pairing hint as one unit.
+    usage_group = lv_obj_create(usage_container);
+    lv_obj_set_size(usage_group, L.scr_w, L.scr_h);
+    lv_obj_set_pos(usage_group, 0, 0);
+    lv_obj_set_style_bg_opa(usage_group, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(usage_group, 0, 0);
+    lv_obj_set_style_pad_all(usage_group, 0, 0);
+    lv_obj_clear_flag(usage_group, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(usage_group, LV_OBJ_FLAG_EVENT_BUBBLE);
+
+    // Claude's detail page.
+    GaugePair claude_gp = {};
+    build_gauge_pair(usage_group, &claude_gp, "Claude 5h", "Claude 7d");
+    panel_session     = claude_gp.panel_s;
+    lbl_session_pct   = claude_gp.pct_s;
+    lbl_session_label = claude_gp.label_s;
+    bar_session       = claude_gp.bar_s;
+    lbl_session_reset = claude_gp.reset_s;
+    panel_weekly      = claude_gp.panel_w;
+    lbl_weekly_pct    = claude_gp.pct_w;
+    lbl_weekly_label  = claude_gp.label_w;
+    bar_weekly        = claude_gp.bar_w;
+    lbl_weekly_reset  = claude_gp.reset_w;
+
+    // Enterprise-only overlays inside panel_session — hidden until enterprise data arrives
+    lbl_session_pct_sym = lv_label_create(panel_session);
+    lv_label_set_text(lbl_session_pct_sym, "%");
+    lv_obj_set_style_text_font(lbl_session_pct_sym, L.reset_font, 0);
+    lv_obj_set_style_text_color(lbl_session_pct_sym, COL_TEXT, 0);
+    lv_obj_add_flag(lbl_session_pct_sym, LV_OBJ_FLAG_HIDDEN);
+
+    if (L.round) {
+        lbl_spending_desc = make_centered_label(panel_session, "of your monthly budget",
+                                                L.reset_font, COL_DIM, L.r_s_reset_y);
+        lbl_spending_status = make_centered_label(panel_session, "", L.pace_font, COL_DIM,
+                                                  L.r_s_reset_y + 20);
+    } else {
+        lbl_spending_desc = lv_label_create(panel_session);
+        lv_label_set_text(lbl_spending_desc, "of your monthly budget");
+        lv_obj_set_style_text_font(lbl_spending_desc, L.reset_font, 0);
+        lv_obj_set_style_text_color(lbl_spending_desc, COL_DIM, 0);
+        lv_obj_set_pos(lbl_spending_desc, 0, L.usage_reset_y);
+
+        lbl_spending_status = lv_label_create(panel_session);
+        lv_label_set_text(lbl_spending_status, "");
+        lv_obj_set_style_text_font(lbl_spending_status, L.pace_font, 0);
+        lv_obj_set_pos(lbl_spending_status, 0, L.usage_reset_y + 20);
+    }
+    lv_obj_add_flag(lbl_spending_desc, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(lbl_spending_status, LV_OBJ_FLAG_HIDDEN);
+    // Recolor enabled so enterprise period box can color pace and reset separately
+    lv_label_set_recolor(lbl_weekly_reset, true);
+
+    // Codex's detail page — same gauges, its own numbers.
+    codex_group = make_layer(usage_container);
+    build_gauge_pair(codex_group, &codex_gp, "Codex 5h", "Codex 7d");
+    lv_obj_add_flag(codex_group, LV_OBJ_FLAG_HIDDEN);
+
+    // The combo page: both providers, compact. Default data screen.
+    combo_group = make_layer(usage_container);
+    build_combo_block(combo_group, L.combo_y, "Claude", &combo_claude);
+    build_combo_block(combo_group, L.combo_y + L.combo_h + L.combo_gap, "Codex", &combo_codex);
+    lv_obj_add_flag(combo_group, LV_OBJ_FLAG_HIDDEN);
+    render_combo();
+
+    build_pair_group(usage_container);
+    build_idle_group(usage_container);
+    build_page_dots(usage_container);
+
+    // Status line — always visible on the usage view. Driven by ui_tick_anim().
+    lbl_anim = lv_label_create(usage_container);
+    lv_label_set_text(lbl_anim, "");
+    lv_obj_set_style_text_font(lbl_anim, L.anim_font, 0);
+    lv_obj_set_style_text_color(lbl_anim, COL_ACCENT, 0);
+    lv_obj_align(lbl_anim, LV_ALIGN_BOTTOM_MID, 0, L.anim_y);
+}
+
+// ======== Public API ========
+
+void ui_init(void) {
+    compute_layout(board_caps());
+
+    lv_obj_t* scr = lv_screen_active();
+    lv_obj_set_style_bg_color(scr, COL_BG, 0);
+    lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+
+#ifndef BOARD_HAS_PSRAM
+    // Static corner mascot (see clawd_still.h) — the animated one needs PSRAM.
+    if (L.small_icons) init_icon_dsc_rgb565a8(&logo_dsc, CLAWD_STILL_SMALL_W, CLAWD_STILL_SMALL_H, clawd_still_small_data);
+    else               init_icon_dsc_rgb565a8(&logo_dsc, CLAWD_STILL_W, CLAWD_STILL_H, clawd_still_data);
+#endif
+    init_battery_icons();
+
+    init_usage_screen(scr);
+    splash_init(scr);
+
+    if (splash_get_root()) {
+        attach_touch_actions(splash_get_root());
+    }
+
+    // Corner mascot in the old logo slot (none on round panels, which have no
+    // corner). The still Clawd is shorter than the 80/40 px slot the spark
+    // logo used; center it vertically in that slot.
+    if (L.show_logo) {
+        const int slot  = L.small_icons ? LOGO_SMALL_HEIGHT : LOGO_HEIGHT;
+        const int art_h = L.small_icons ? CLAWD_STILL_SMALL_H : CLAWD_STILL_H;
+        const int top   = L.logo_y + (slot - art_h) / 2;
+#ifdef BOARD_HAS_PSRAM
+        // Animated: idles, does acts, takes walk-off/lurk trips — or plays
+        // the host's state when the host asks for the corner ("ua"). Cell 3
+        // everywhere; on the small layout he stands right on top of the
+        // panels, which is what the taller small header is for.
+        const int feet = L.small_icons ? L.content_y - 2 : top + art_h;
+        // Room left of the title, measured on the widest thing it shows (the
+        // clock), so a host state never runs into it. The advance widths
+        // include the glyphs' side bearings, which already leave a visible gap.
+        int title_w = 0;
+        for (const char* p = "00:00"; *p; p++)
+            title_w += lv_font_get_glyph_width(L.title_font, (uint32_t)p[0], (uint32_t)p[1]);
+        const int title_left = (L.scr_w - title_w) / 2 + L.title_nudge;
+        splash_mascot_create(scr, L.margin, feet, 3, title_left - L.margin);
+#else
+        logo_img = lv_image_create(scr);
+        lv_image_set_src(logo_img, &logo_dsc);
+        lv_obj_set_pos(logo_img, L.margin, top);
+#endif
+    }
+
+    battery_img = lv_image_create(scr);
+    lv_image_set_src(battery_img, &battery_dscs[0]);
+    lv_obj_set_pos(battery_img, L.scr_w - L.batt_w - L.margin, L.batt_y);
+    // Boards without battery telemetry never show the indicator (per the HAL
+    // contract; previously every board drew the empty-battery glyph).
+    if (!board_caps().has_battery) {
+        lv_obj_del(battery_img);
+        battery_img = nullptr;
+    }
+
+    // Above the usage view and the splash, below the charge overlay — the
+    // pairing gesture can be started from either screen.
+    build_pair_toast(scr);
+
+    // Last, so the charge overlay covers everything else when it plays.
+    charge_anim_init(scr);
+}
+
+void ui_update(const UsageData* data) {
+    if (!data->valid) return;
+
+    // Codex first: its numbers ride on every payload, the "No data" beats
+    // included, so they update even while the Claude half is idle.
+    codex_data = data->codex;
+    if (codex_data.valid) {
+        last_codex_ms = lv_tick_get();
+        fill_gauge_pair(&codex_gp, codex_data.session_pct, codex_data.session_reset_mins,
+                        codex_data.weekly_pct, codex_data.weekly_reset_mins);
+    }
+
+    data_ok = data->ok;
+    if (!data->ok) {                // a {"ok":false} "no data" beat → fall through to idle, keep last numbers
+        render_combo();
+        return;
+    }
+    last_data_ms = lv_tick_get();   // a real usage update just landed
+    data_received = true;
+    claude_data = *data;
+
+    if (data->clock_epoch > 0) {    // daemon supplied wall-clock time → drive the title clock
+        clock_base_epoch = data->clock_epoch;
+        clock_base_ms = last_data_ms;
+        // Die Uhr wird nur beim Minutenwechsel neu geschrieben. Wechselt das
+        // Format, wuerde die Umstellung sonst bis zu eine Minute lang nicht zu
+        // sehen sein -- der Schalter im Programm sieht dann kaputt aus. Also
+        // den gemerkten Minutenwert verwerfen, damit der naechste Durchlauf
+        // sofort neu schreibt.
+        if (clock_fmt != data->clock_fmt) clock_last_min = -1;
+        clock_fmt = data->clock_fmt;
+    } else if (clock_base_epoch != 0) {   // clock turned off daemon-side → revert title to "Usage"
+        clock_base_epoch = 0;
+        clock_last_min = -1;
+        lv_label_set_text(lbl_title, "Usage");
+    }
+
+    int s_pct = (int)(data->session_pct + 0.5f);
+
+    if (data->enterprise) {
+        // Spending box: big number-only label + small "%" symbol + desc + pace
+        lv_obj_set_style_text_font(lbl_session_pct, L.ent_pct_font, 0);
+        lv_label_set_text(lbl_session_label, "Spending");
+        lv_obj_add_flag(lbl_session_reset, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(lbl_session_pct_sym, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(lbl_spending_desc,   LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(lbl_spending_status,   LV_OBJ_FLAG_HIDDEN);
+        if (panel_weekly) lv_obj_clear_flag(panel_weekly, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_set_style_text_font(lbl_session_pct, L.pct_font, 0);
+        lv_label_set_text(lbl_session_label, "Claude 5h");
+        lv_label_set_text(lbl_weekly_label, "Claude 7d");
+        lv_obj_clear_flag(lbl_session_reset, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(lbl_session_pct_sym, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(lbl_spending_desc,   LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(lbl_spending_status, LV_OBJ_FLAG_HIDDEN);
+        if (panel_weekly) lv_obj_clear_flag(panel_weekly, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    char buf[48];
+
+    // Pace vars used in both enterprise blocks below
+    const char* pace_text = "Under pace";
+    lv_color_t  pace_color = COL_GREEN;
+    const char* pace_hex   = "788c5d";   // matches THEME_GREEN
+    if (data->session_pct > (float)data->time_pct + 15.0f) {
+        pace_text = "Over pace";  pace_color = COL_RED;   pace_hex = "c0392b";
+    } else if (data->session_pct > (float)data->time_pct - 15.0f) {
+        pace_text = "On pace";    pace_color = COL_AMBER; pace_hex = "d97757";
+    }
+
+    if (data->enterprise) {
+        lv_label_set_text_fmt(lbl_session_pct, "%d", s_pct);
+        lv_obj_align_to(lbl_session_pct_sym, lbl_session_pct,
+                        LV_ALIGN_OUT_RIGHT_TOP, 4, 12);
+    } else {
+        lv_label_set_text_fmt(lbl_session_pct, "%d%%", s_pct);
+        format_reset_time(data->session_reset_mins, buf, sizeof(buf));
+        lv_label_set_text(lbl_session_reset, buf);
+    }
+
+    set_gauge(bar_session, s_pct, pct_color(data->session_pct));
+
+    if (data->enterprise) {
+        // Period box: time % + dynamic pace color + "Resets <date>" label
+        lv_label_set_text(lbl_weekly_label, "Period");
+        lv_label_set_text_fmt(lbl_weekly_pct, "%d%%", data->time_pct);
+        lv_color_t bar_pace = (data->session_pct <= (float)data->time_pct) ? L.gauge_ok :
+                              (data->session_pct <= (float)data->time_pct + 15.0f) ? COL_AMBER :
+                              COL_RED;
+        set_gauge(bar_weekly, data->time_pct, bar_pace);
+        snprintf(buf, sizeof(buf), "#%s %s# - #faf9f5 Resets %s#",
+                 pace_hex, pace_text, data->reset_date);
+        lv_label_set_text(lbl_weekly_reset, buf);
+    } else {
+        int w_pct = (int)(data->weekly_pct + 0.5f);
+        lv_label_set_text_fmt(lbl_weekly_pct, "%d%%", w_pct);
+        set_gauge(bar_weekly, w_pct, pct_color(data->weekly_pct));
+        format_reset_time(data->weekly_reset_mins, buf, sizeof(buf));
+        lv_label_set_text(lbl_weekly_reset, buf);
+    }
+    render_combo();
+}
+
+// Pick the usage-view sub-screen: pairing hint (BLE down), the idle "Zzz" screen
+// (connected but data has gone stale), or the live usage panels. Only re-lays-out
+// on an actual change. The animated status line stays visible everywhere — it
+// reads "Listening…" on the idle screen, keeping it alive rather than frozen.
+//
+// Which live view depends on the page: Claude's and Codex's detail pages go
+// idle when their own numbers are stale, the combo page only when both are.
+// view_state: 0 pair / 1 idle / 2 Claude / 3 Codex / 4 combo.
+static void update_view_state(void) {
+    if (!usage_group || !pair_group || !idle_group) return;
+    const bool cl = claude_fresh();
+    const bool cx = codex_fresh();
+    const int mask = (cl ? 1 : 0) | (cx ? 2 : 0);
+    if (mask != fresh_mask) {   // a half went stale (or came back) without a new payload
+        fresh_mask = mask;
+        render_combo();
+    }
+    // Codex's numbers are gone: its page has nothing to show, and swiping
+    // skips it now, so go back to the combo instead of parking on "Zzz".
+    if (current_screen == SCREEN_CODEX && !cx) {
+        ui_show_screen(SCREEN_USAGE);
+        return;
+    }
+    const screen_t page = prev_non_splash_screen;
+    int v;
+    if (!s_ble_connected) {
+        v = 0;  // pairing hint
+    } else if (page == SCREEN_CLAUDE) {
+        v = cl ? 2 : 1;
+    } else if (page == SCREEN_CODEX) {
+        v = cx ? 3 : 1;
+    } else {
+        v = (cl || cx) ? 4 : 1;
+    }
+    update_page_dots(page, v != 0);
+    if (v == view_state) return;
+    view_state = v;
+    lv_obj_t* groups[] = { pair_group, idle_group, usage_group, codex_group, combo_group };
+    for (int i = 0; i < 5; i++) {
+        if (i == v) lv_obj_clear_flag(groups[i], LV_OBJ_FLAG_HIDDEN);
+        else        lv_obj_add_flag(groups[i], LV_OBJ_FLAG_HIDDEN);
+    }
+    // Der Eckbuddy haengt am view_state, nicht nur am Screen.
+    apply_corner_creature();
+}
+
+// Fusszeile fuer den vom Host gemeldeten Zustand. NULL heisst "nichts zu
+// sagen" -- dann laeuft die Wortliste weiter. Arbeitszustaende geben bewusst
+// NULL zurueck: genau dort gehoert die Wortliste hin.
+static const char* footer_for_host_anim(lv_color_t* col) {
+    if (!host_anim[0]) return NULL;
+    // Die Farbe sagt schon aus zwei Metern, ob etwas ansteht: Bernstein
+    // heisst "der Rechner wartet auf dich", Gruen "Claude ist fertig", Rot
+    // "Limit". Grau tritt zurueck, wenn ohnehin nichts passiert.
+    if (strcmp(host_anim, "allow") == 0) { *col = COL_AMBER; return "Needs you"; }
+    if (strcmp(host_anim, "done") == 0)  { *col = COL_GREEN; return "Your turn"; }
+    if (strcmp(host_anim, "limit") == 0) { *col = COL_RED;   return "Limit reached"; }
+    if (strcmp(host_anim, "idle breathe") == 0 ||
+        strcmp(host_anim, "idle blink") == 0 ||
+        strcmp(host_anim, "idle look around") == 0 ||
+        strcmp(host_anim, "expression sleep") == 0) { *col = COL_DIM; return "Idle"; }
+    return NULL;                       // Arbeit, Tanz, Zwinkern: Wortliste
+}
+
+void ui_tick_anim(void) {
+    // Vor dem Ausstieg unten: waehrend der Splash laeuft, kommt der Rest der
+    // Funktion nicht mehr dran -- der Rueckweg muss also hier stehen.
+    if (auto_splash_until && (int32_t)(millis() - auto_splash_until) >= 0) {
+        auto_splash_until = 0;
+        if (current_screen == SCREEN_SPLASH) {
+            Serial.printf("auto splash: %lu ms sichtbar\n",
+                          (unsigned long)(millis() - auto_splash_started));
+            ui_show_screen(prev_non_splash_screen);
+        }
+    }
+    if (current_screen == SCREEN_SPLASH) return;
+    update_view_state();
+    if (view_state == 1) splash_mini_tick();   // animate the resting creature on the idle screen
+
+    uint32_t now = lv_tick_get();
+
+    // Title clock: once the daemon has sent wall-clock time, replace "Usage" with
+    // the live time, advanced locally so it ticks every minute between payloads.
+    if (clock_base_epoch > 0) {
+        time_t cur = (time_t)(clock_base_epoch + (now - clock_base_ms) / 1000);
+        struct tm tmv;
+        gmtime_r(&cur, &tmv);   // epoch is already local wall-clock → gmtime keeps it as-is
+        if (tmv.tm_min != clock_last_min) {   // only rewrite the title when the minute changes
+            clock_last_min = tmv.tm_min;
+            char tbuf[12];
+            if (clock_fmt == 12) {
+                int h12 = tmv.tm_hour % 12;
+                if (h12 == 0) h12 = 12;
+                snprintf(tbuf, sizeof(tbuf), "%d:%02d %s", h12, tmv.tm_min,
+                         tmv.tm_hour < 12 ? "AM" : "PM");
+            } else {
+                snprintf(tbuf, sizeof(tbuf), "%02d:%02d", tmv.tm_hour, tmv.tm_min);
+            }
+            lv_label_set_text(lbl_title, tbuf);
+        }
+    }
+
+    if (now - anim_msg_start >= ANIM_MSG_MS) {
+        anim_msg_idx = (anim_msg_idx + 1) % ANIM_MSG_COUNT;
+        anim_msg_start = now;
+    }
+
+    if (now - anim_last_ms < spinner_ms[anim_spinner_idx]) return;
+    anim_last_ms = now;
+    anim_phase = (anim_phase + 1) % SPINNER_PHASES;
+    anim_spinner_idx = (anim_phase < SPINNER_COUNT) ? anim_phase
+                                                    : (SPINNER_PHASES - anim_phase);
+
+    // Status text by priority. Whimsical messages only when connected & settled.
+    const char* text;
+    // Voreinstellung wie bisher; die Zweige unten faerben um, wo es etwas zu
+    // sagen gibt. Ohne Verbindung und ohne Daten tritt die Zeile zurueck --
+    // sie meldet dann nichts ueber Claude, sondern ueber sich selbst.
+    lv_color_t col = COL_ACCENT;
+    if (!s_ble_connected) {
+        text = "Waiting";              // advertising / waiting for a host connection
+        col = COL_DIM;
+    } else if (view_state == 1) {      // idle — alternate so it reads as alive AND data-less
+        text = (anim_msg_idx & 1) ? "No data" : "Listening";
+        col = COL_DIM;
+    } else if (now - connected_at_ms < 5000) {
+        text = "Connected";
+        col = COL_GREEN;
+    } else {
+        // Die Wortliste gehoert zur Arbeit. Sie lief bisher immer, auch wenn
+        // Claude seit einer Stunde nichts tat -- huebsch, aber ohne Aussage.
+        // Meldet der Host einen Zustand, der gerade *nicht* Arbeit ist, sagt
+        // die Zeile lieber, worauf es ankommt. Ohne Vorgabe bleibt alles wie
+        // gehabt.
+        const char* state_text = footer_for_host_anim(&col);
+        text = state_text ? state_text : anim_messages[anim_msg_idx];
+    }
+
+    // All states share the whimsical style: "<glyph> <Title-case word>…"
+    static char buf[80];
+    snprintf(buf, sizeof(buf), "%s %s\xE2\x80\xA6",
+             spinner_frames[anim_spinner_idx], text);
+    lv_label_set_text(lbl_anim, buf);
+    lv_obj_set_style_text_color(lbl_anim, col, 0);
+}
+
+static void apply_battery_visibility(void) {
+    if (!battery_img) return;
+    if (current_screen == SCREEN_SPLASH) lv_obj_add_flag(battery_img, LV_OBJ_FLAG_HIDDEN);
+    else                                  lv_obj_clear_flag(battery_img, LV_OBJ_FLAG_HIDDEN);
+}
+
+// The host's state goes to the corner only when the host asked for it and
+// the usage screen shows live numbers — on the pair / idle screens there is
+// nothing to mirror, so the mascot keeps its own routine there.
+static void apply_corner_creature(void) {
+    bool host = usage_creature_on && usage_creature_anim[0] && view_state >= 2;
+    splash_mascot_set_host_anim(host ? usage_creature_anim : "");
+    if (logo_img) {
+        if (current_screen == SCREEN_SPLASH) lv_obj_add_flag(logo_img, LV_OBJ_FLAG_HIDDEN);
+        else                                  lv_obj_clear_flag(logo_img, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+
+void ui_set_corner_creature(bool on) {
+    if (on == usage_creature_on) return;
+    usage_creature_on = on;
+    apply_corner_creature();
+}
+
+
+void ui_set_screen_mode(int mode) {
+    if (mode < SCREEN_MODE_USAGE || mode > SCREEN_MODE_AUTO) mode = SCREEN_MODE_USAGE;
+    if (mode == screen_mode) return;
+    screen_mode = mode;
+    auto_splash_until = 0;
+    // Nur beim Wechsel durchgreifen. Danach bleibt das Antippen frei: der
+    // Modus soll die Anzeige einrichten, nicht mit dem Finger streiten.
+    if (mode == SCREEN_MODE_BUDDY)      ui_show_screen(SCREEN_SPLASH);
+    else                                ui_show_screen(SCREEN_USAGE);
+}
+
+
+void ui_set_host_anim(const char* name) {
+    // Zwinkern und Erschrecken sind Momente, keine Zustaende: sie blitzen
+    // ein paar Sekunden auf und sagen nichts darueber aus, ob Claude
+    // arbeitet oder wartet. Der Buddy zeigt sie (der laeuft ueber
+    // ui_set_corner_anim), die Fusszeile laesst sie durch -- sonst stuende
+    // waehrend eines Zwinkerns "Accomplishing..." da, obwohl gerade nichts
+    // passiert, oder "Idle", obwohl Claude laeuft.
+    if (name && (strcmp(name, "expression wink") == 0 ||
+                 strcmp(name, "expression surprise") == 0)) return;
+    bool changed = name && name[0] && strcmp(name, host_anim) != 0;
+    if (name && name[0]) strlcpy(host_anim, name, sizeof(host_anim));
+    else                 host_anim[0] = '\0';
+
+    // Neuer Zustand: einmal gross zeigen, dann zurueck zu den Zahlen. Nur in
+    // diesem Modus, und nur wenn sich wirklich etwas geaendert hat -- sonst
+    // spraenge die Anzeige bei jedem Paket.
+    if (changed && screen_mode == SCREEN_MODE_AUTO) {
+        // Die Frist gilt dem Bildschirmwechsel, nicht der Animation: ein neuer
+        // Zustand waehrend der Buddy schon steht wird nicht verschluckt --
+        // splash_set_anim() zeigt ihn sofort, und die Frist beginnt von vorn,
+        // damit auch der Neue seine vollen Sekunden bekommt.
+        if (current_screen != SCREEN_SPLASH) {
+            auto_splash_started = millis();
+            ui_show_screen(SCREEN_SPLASH);
+            Serial.printf("auto splash: zeige %s\n", host_anim);
+        }
+        auto_splash_until = millis() + AUTO_SPLASH_MS;
+    }
+}
+
+
+void ui_set_corner_anim(const char* name) {
+    // "" = the host has nothing to mirror: the mascot goes back to its own
+    // routine (apply_corner_creature passes "" on).
+    strlcpy(usage_creature_anim, name ? name : "", sizeof(usage_creature_anim));
+    apply_corner_creature();
+}
+
+
+static void global_click_cb(lv_event_t* e) {
+    (void)e;
+    // Wer selbst umschaltet, soll nicht Sekunden spaeter zurueckgerissen
+    // werden: der automatische Rueckweg ist damit erledigt.
+    auto_splash_until = 0;
+    if (current_screen == SCREEN_SPLASH) ui_show_screen(prev_non_splash_screen);
+    else                                  ui_show_screen(SCREEN_SPLASH);
+}
+
+void ui_show_screen(screen_t screen) {
+    lv_obj_add_flag(usage_container, LV_OBJ_FLAG_HIDDEN);
+    splash_hide();
+
+    switch (screen) {
+    case SCREEN_SPLASH:  splash_show(); break;
+    case SCREEN_USAGE:
+    case SCREEN_CLAUDE:
+    case SCREEN_CODEX:   lv_obj_clear_flag(usage_container, LV_OBJ_FLAG_HIDDEN); break;
+    default: break;
+    }
+
+    if (screen != SCREEN_SPLASH) prev_non_splash_screen = screen;
+    current_screen = screen;
+    if (screen != SCREEN_SPLASH) update_view_state();   // swap in this page's group now
+    splash_mascot_set_visible(screen != SCREEN_SPLASH);
+    // Erst nach current_screen: apply_corner_creature() liest die Variable,
+    // nicht das Argument. Davor entschied es noch nach dem alten Screen und
+    // versteckte auf dem Weg zum Usage-Screen beides -- die Ecke blieb leer.
+    apply_corner_creature();
+    apply_battery_visibility();
+}
+
+void ui_toggle_splash(void) {
+    if (current_screen == SCREEN_SPLASH) ui_show_screen(prev_non_splash_screen);
+    else                                  ui_show_screen(SCREEN_SPLASH);
+}
+
+screen_t ui_get_current_screen(void) {
+    return current_screen;
+}
+
+void ui_update_ble_status(ble_state_t state, const char* name, const char* mac) {
+    (void)name; (void)mac;
+    bool was_connected = s_ble_connected;
+    s_ble_connected = (state == BLE_STATE_CONNECTED);
+
+    if (s_ble_connected && !was_connected) connected_at_ms = lv_tick_get();
+    // pair / idle / usage — picked from connection + data freshness.
+    update_view_state();
+}
+
+// How long the overlay outlives the last state report. One watchdog covers
+// every ending: the finger lifting mid-gesture (no release event is guaranteed
+// — LVGL can send PRESS_LOST instead), and DONE, which nothing else clears.
+#define PAIR_TOAST_MS 2000
+
+void ui_set_pair_state(pair_ui_t state) {
+    if (!pair_toast) return;
+    const bool changed = (state != pair_ui_state);
+    pair_ui_state = state;
+
+    if (state == PAIR_UI_NONE) {
+        if (changed) pair_toast_dismiss(pair_toast_timer);
+        return;
+    }
+
+    if (changed) {
+        const char* text;
+        lv_color_t  color;
+        switch (state) {
+        case PAIR_UI_ARMED:    text = "Release now to pair";        color = COL_ACCENT; break;
+        case PAIR_UI_TOO_LONG: text = "Release and retry";          color = COL_RED;    break;
+        case PAIR_UI_NOT_YET:  text = "Not yet - link just dropped"; color = COL_DIM;   break;
+        case PAIR_UI_DONE:     text = "Pairing - ready to connect"; color = COL_GREEN;  break;
+        default:               text = "Keep holding";               color = COL_DIM;    break;
+        }
+        lv_label_set_text(pair_toast_lbl, text);
+        lv_obj_set_style_text_color(pair_toast_lbl, color, 0);
+        lv_obj_set_style_border_color(pair_toast, color, 0);
+        lv_obj_clear_flag(pair_toast, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_align(pair_toast, LV_ALIGN_CENTER, 0, 0);   // the text changed the height
+    }
+
+    // Every call feeds the watchdog, so a gesture that keeps reporting keeps
+    // the overlay, and one that stops gets two seconds of reading time.
+    if (!pair_toast_timer)
+        pair_toast_timer = lv_timer_create(pair_toast_dismiss, PAIR_TOAST_MS, nullptr);
+    lv_timer_set_period(pair_toast_timer, PAIR_TOAST_MS);
+    lv_timer_reset(pair_toast_timer);
+    lv_timer_resume(pair_toast_timer);
+}
+
+bool ui_pair_overlay_active(void) { return pair_ui_state != PAIR_UI_NONE; }
+
+void ui_set_pairing_rejected(bool rejected) {
+    if (!pair_l1 || rejected == pair_rejected) return;
+    pair_rejected = rejected;
+
+    if (rejected) {
+        // "To pair" is true but useless here: the host says the two ARE paired,
+        // so the user needs to hear that the host's key is the stale one and
+        // that clearing it there is the half that this board cannot do.
+        lv_label_set_text(pair_l1, "Pairing failed");
+        lv_label_set_text(pair_l2, "the host has a stale key");
+        lv_label_set_text(pair_l3, "remove it there, then retry");
+        lv_obj_set_style_text_color(pair_l1, COL_RED, 0);
+    } else {
+        const char* key = board_caps().pair_key ? board_caps().pair_key : "the power button";
+        lv_label_set_text(pair_l1, "To pair");
+        lv_label_set_text_fmt(pair_l2, "hold %s", key);
+        lv_label_set_text(pair_l3, "for 3 seconds, then release");
+        lv_obj_set_style_text_color(pair_l1, COL_TEXT, 0);
+    }
+    lv_obj_align(pair_l1, LV_ALIGN_TOP_MID, 0, L.pair_y1);
+    lv_obj_align(pair_l2, LV_ALIGN_TOP_MID, 0, L.pair_y2);
+    lv_obj_align(pair_l3, LV_ALIGN_TOP_MID, 0, L.pair_y3);
+}
+
+void ui_update_battery(int percent, bool charging) {
+    if (!battery_img) return;
+    int idx;
+    if (charging) {
+        idx = 4;
+    } else if (percent < 0) {
+        idx = 0;
+    } else if (percent <= 10) {
+        idx = 0;
+    } else if (percent <= 35) {
+        idx = 1;
+    } else if (percent <= 75) {
+        idx = 2;
+    } else {
+        idx = 3;
+    }
+    lv_image_set_src(battery_img, &battery_dscs[idx]);
+    apply_battery_visibility();
+}

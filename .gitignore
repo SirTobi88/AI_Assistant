@@ -1,0 +1,16 @@
+# PlatformIO
+firmware/.pio/
+firmware/.vscode/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Simulator screenshots
+firmware/sim-*.bmp
+
+# OS / tools
+.DS_Store
+.claude/

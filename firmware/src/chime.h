@@ -1,0 +1,56 @@
+#pragma once
+#include <stdint.h>
+
+// Board-agnostic ES8311 + I2S chime engine. A board's sound.cpp fills in a
+// ChimeConfig (its I2S pins, codec address, volume, and a power-amp enable
+// hook) and calls chime_init() once; chime_play() then streams the embedded
+// reset clip (bell_pcm.h) to the codec in a one-shot FreeRTOS task so the LVGL
+// loop never blocks. The embedded PCM is 44.1 kHz / 16-bit / stereo, so
+// cfg.sample_rate must be 44100 for correct-pitch playback.
+//
+// amp_enable is the only part that differs structurally between boards: the
+// 2.16 toggles a GPIO, the 1.8 drives an XCA9554 expander line. May be null.
+
+typedef void (*amp_enable_fn)(bool on);
+
+struct ChimeConfig {
+    int          mclk, bclk, ws, dout, din;  // I2S GPIOs
+    int          sample_rate;                // must match the embedded PCM (44100)
+    uint8_t      es8311_addr;                // codec I2C address (0x18)
+    uint8_t      volume;                     // 0..100
+    amp_enable_fn amp_enable;                // power-amp on/off hook (nullable)
+};
+
+// Bring up I2S + the ES8311 codec. Returns true on success; false leaves the
+// engine inert (chime_play becomes a no-op). Wire/I2C must already be up.
+bool chime_init(const ChimeConfig& cfg);
+
+// Queue one playback of the embedded clip (non-blocking). No-op if not ready
+// or already playing.
+void chime_play(void);
+
+// Short UI cues for the hold-to-pair gesture. Synthesized on the fly instead
+// of embedded as PCM — two more clips would cost far more flash than the
+// oscillator costs code, and these want to be plain beeps, not bells.
+//   ARMED  — one blip the moment releasing would pair ("now")
+//   PAIRED — a rising two-tone confirming the bonds were cleared
+// Non-blocking and gated by the same busy flag as chime_play().
+//   NEEDS_YOU — two equal knocks: Claude waits for your permission
+//   YOUR_TURN — three rising notes (E major): Claude finished its reply
+//   LIMIT     — three low falling notes: the usage limit is used up
+enum chime_cue_t {
+    CHIME_CUE_PAIR_ARMED,
+    CHIME_CUE_PAIRED,
+    CHIME_CUE_NEEDS_YOU,
+    CHIME_CUE_YOUR_TURN,
+    CHIME_CUE_LIMIT,
+};
+void chime_play_cue(chime_cue_t cue);
+
+// Overall level for every sound, 0..100 % of full (the board's codec volume
+// is the 100 % point). Applied to the samples, so it scales the bell and the
+// cues alike. Default 100.
+void chime_set_gain(uint8_t pct);
+
+// Currently a no-op (playback runs in its own task); kept for HAL symmetry.
+void chime_tick(void);
