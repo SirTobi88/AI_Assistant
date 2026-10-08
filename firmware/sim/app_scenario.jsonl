@@ -1,0 +1,7 @@
+# Ring-menu scenario: limits, options, sessions, monitor, then a permission
+# prompt after ~8 s. Run with SIM_SCENARIO=sim/app_scenario.jsonl.
+{"name":"limits","hold_ms":100,"s":42.0,"sr":150,"w":18.0,"wr":7200,"st":"allowed","ok":true}
+{"name":"options","hold_ms":100,"t":"options","model":["opus","sonnet","haiku"],"effort":["low","medium","high","xhigh","max"],"mode":["default","plan","acceptEdits","auto"]}
+{"name":"sessions","hold_ms":100,"t":"sessions","act":"a1b2","ss":[["a1b2","AI_Assistant",4,62,"opus","high","default",0,0],["c3d4","AI_Limitmeter",7,18,"sonnet","medium","plan",1,1],["e5f6","Website",10,35,"opus","xhigh","acceptEdits",0,0],["g7h8","Notizen",9,-1,"haiku","low","default",0,0]]}
+{"name":"monitor","hold_ms":8000,"t":"monitor","sid":"a1b2","burn":8.4,"eta":205,"tok":124,"ag":2,"td":3,"tt":7,"add":120,"del":34,"ci":1,"pr":42}
+{"name":"prompt","hold_ms":600000,"t":"prompt","id":"p17","sid":"a1b2","k":"perm","ti":"Bash","tx":"git push origin main","o":["Erlauben","Immer erlauben","Ablehnen"],"m":0,"d":3,"to":300}

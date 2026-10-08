@@ -73,7 +73,7 @@ class Prompt:
     text: str
     options: list[str]
     multi: bool = False
-    danger: bool = False
+    confirm: tuple[int, ...] = ()   # option indices that need hold-to-confirm
     timeout: int = 120
 
     def msg(self) -> dict:
@@ -84,7 +84,8 @@ class Prompt:
         return {"t": "prompt", "id": self.id, "sid": self.sid, "k": self.kind,
                 "ti": _clip(self.title, 40), "tx": _clip(self.text, MAX_PROMPT_TEXT),
                 "o": [_clip(o, MAX_OPTION_LEN) for o in self.options[:MAX_OPTIONS]],
-                "m": int(self.multi), "d": int(self.danger), "to": int(self.timeout)}
+                "m": int(self.multi), "d": sum(1 << i for i in set(self.confirm) if 0 <= i < MAX_OPTIONS),
+                "to": int(self.timeout)}
 
 
 def prompt_done_msg(prompt_id: str) -> dict:

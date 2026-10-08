@@ -13,7 +13,8 @@ def test_small_message_goes_as_bare_json():
 
 def test_large_message_is_framed_and_reassembles():
     msg = p.Prompt("p17", "a1b2", "perm", "Bash", "git push origin main " * 20,
-                   ["Erlauben", "Immer erlauben", "Ablehnen"], danger=True).msg()
+                   ["Erlauben", "Immer erlauben", "Ablehnen"], confirm=(0, 1)).msg()
+    assert msg["d"] == 3
     writes = p.frame(msg, msg_id=300, chunk=64)
     assert len(writes) > 1
     assert all(len(w) <= 64 for w in writes)

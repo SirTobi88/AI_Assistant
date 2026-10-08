@@ -1,6 +1,7 @@
 #include "board.h"
 #include "../../hal/touch_hal.h"
 #include <SDL.h>
+#include "sim_platform.h"
 
 void touch_hal_init(void) {}
 
@@ -16,4 +17,9 @@ void touch_hal_read(uint16_t* x, uint16_t* y, bool* pressed) {
     *x = (uint16_t)mx;
     *y = (uint16_t)my;
     *pressed = (b & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0;
+    if (sim_script_touch()) {   // scripted finger lands mid-screen
+        *x = LCD_WIDTH / 2;
+        *y = LCD_HEIGHT / 2;
+        *pressed = true;
+    }
 }

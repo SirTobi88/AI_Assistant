@@ -18,6 +18,8 @@ bool sim_take_pwr_long(void);
 bool sim_take_pwr_released(void);
 int  sim_battery_pct(void);
 int  sim_take_encoder_steps(void);   // detents since the last call, + = next
+// Scripted finger (SIM_INPUT): true while the script holds the screen.
+bool sim_script_touch(void);
 bool sim_charging(void);
 
 // Scenario playback controls, implemented in ble_sim.cpp.

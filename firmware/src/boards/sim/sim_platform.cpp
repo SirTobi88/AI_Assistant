@@ -2,6 +2,7 @@
 #include <SDL.h>
 #include <Arduino.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 static bool quit = false;
 
@@ -12,6 +13,59 @@ static bool     edge_pressed = false, edge_long = false, edge_released = false;
 
 static int  battery = 87;
 static int  encoder_steps = 0;
+
+// SIM_INPUT="ms:action,..." replays input for headless runs, e.g.
+//   SIM_INPUT="1000:d,1400:d,2000:t,3000:h1800" SIM_AUTOSHOT_MS=6000
+// Actions: u / d = one ring detent back / forward, t = tap,
+// h<ms> = hold the screen that long, s = save a screenshot (sim-shot-N.bmp,
+// or SIM_SHOT_PREFIX-N.bmp).
+#define SCRIPT_MAX 64
+struct ScriptStep { uint32_t at; char what; uint32_t len; };
+static ScriptStep script[SCRIPT_MAX];
+static int script_n = -1, script_i = 0;
+static uint32_t touch_until = 0;
+
+static void script_load(void) {
+    script_n = 0;
+    const char* v = getenv("SIM_INPUT");
+    if (!v) return;
+    while (*v && script_n < SCRIPT_MAX) {
+        char* end;
+        uint32_t at = strtoul(v, &end, 10);
+        if (*end != ':') break;
+        ScriptStep st = { at, end[1], 0 };
+        v = end + 2;
+        if (st.what == 'h') { st.len = strtoul(v, &end, 10); v = end; }
+        script[script_n++] = st;
+        while (*v && *v != ',') v++;
+        if (*v == ',') v++;
+    }
+}
+
+static void script_tick(void) {
+    if (script_n < 0) script_load();
+    const uint32_t now = millis();
+    while (script_i < script_n && now >= script[script_i].at) {
+        const ScriptStep& st = script[script_i++];
+        switch (st.what) {
+        case 'u': encoder_steps--; break;
+        case 'd': encoder_steps++; break;
+        case 't': touch_until = now + 60; break;
+        case 'h': touch_until = now + st.len; break;
+        case 's': {
+            static int shot = 0;
+            const char* pre = getenv("SIM_SHOT_PREFIX");
+            char path[256];
+            snprintf(path, sizeof(path), "%s-%d.bmp", pre ? pre : "sim-shot", shot++);
+            sim_display_screenshot(path);
+            break;
+        }
+        default: break;
+        }
+    }
+}
+
+bool sim_script_touch(void) { return millis() < touch_until; }
 static bool charging = false;
 
 static bool take(bool* f) { bool v = *f; *f = false; return v; }
@@ -65,6 +119,8 @@ void sim_pump(void) {
         pwr_long_fired = true;
         edge_long = true;
     }
+
+    script_tick();
 
     // Headless CI hook: SIM_AUTOSHOT_MS=<ms> → screenshot + exit.
     static long autoshot_ms = -2;

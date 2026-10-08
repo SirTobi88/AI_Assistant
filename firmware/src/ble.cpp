@@ -3,6 +3,7 @@
 #include <NimBLEDevice.h>
 #include <NimBLEHIDDevice.h>
 #include <Preferences.h>
+#include "rxq.h"
 
 // Advertised name. Every board used to announce itself as plain "Clawdmeter",
 // so a daemon bonded to one would find another and connect to it — seen on
@@ -20,7 +21,9 @@
 #define TX_CHAR_UUID        "4c41555a-4465-7669-6365-000000000003"  // device ack/nack notifies
 #define REQ_CHAR_UUID       "4c41555a-4465-7669-6365-000000000004"  // device-initiated refresh request
 
-#define BLE_BUF_SIZE 512
+// Notify payload per TX packet. macOS settles on an ATT MTU of 185, so 180
+// leaves room; longer commands go out 0x01-framed like host messages.
+#define TX_CHUNK 180
 
 // HID keyboard report descriptor (standard 6-KRO boot-protocol-compatible).
 // Includes the LED output report (Num/Caps/Scroll Lock indicators) — without
@@ -84,8 +87,6 @@ static const uint16_t DESIRED_TIMEOUT   = 600;   // ×10ms = 6s, matches PPCP
 static volatile uint16_t param_fix_handle = CONN_HANDLE_NONE;  // pending retry
 static volatile uint32_t param_fix_at_ms  = 0;                 // when to send it
 static volatile uint16_t param_fix_spent  = CONN_HANDLE_NONE;  // one per connection
-static char rx_buf[BLE_BUF_SIZE];
-static volatile bool data_ready = false;
 static volatile bool has_received_data = false;
 static char mac_str[18];
 static char dev_name[DEVICE_NAME_MAX] = DEVICE_NAME;   // MAC suffix added in ble_init
@@ -315,10 +316,7 @@ class RxCallbacks : public NimBLECharacteristicCallbacks {
             return;
         }
         std::string val = chr->getValue();
-        size_t len = std::min(val.length(), (size_t)(BLE_BUF_SIZE - 1));
-        memcpy(rx_buf, val.c_str(), len);
-        rx_buf[len] = '\0';
-        data_ready = true;
+        rxq_feed((const uint8_t*)val.data(), val.length());
         has_received_data = true;
     }
 };
@@ -487,12 +485,35 @@ bool ble_pairing_rejected(void) {
 }
 
 bool ble_has_data(void) {
-    return data_ready;
+    return rxq_has();
 }
 
 const char* ble_get_data(void) {
-    data_ready = false;
-    return rx_buf;
+    return rxq_pop();
+}
+
+void ble_send_cmd(const char* json) {
+    if (state != BLE_STATE_CONNECTED || !tx_char || !json) return;
+    static uint8_t msg_id = 0;
+    const size_t len = strlen(json);
+    if (len <= TX_CHUNK) {
+        tx_char->setValue((const uint8_t*)json, len);
+        tx_char->notify();
+        return;
+    }
+    const size_t body = TX_CHUNK - 4;
+    const size_t count = (len + body - 1) / body;
+    if (count > 255) return;
+    msg_id++;
+    uint8_t pkt[TX_CHUNK];
+    for (size_t i = 0; i < count; i++) {
+        const size_t off = i * body;
+        const size_t n = std::min(body, len - off);
+        pkt[0] = 0x01; pkt[1] = msg_id; pkt[2] = (uint8_t)i; pkt[3] = (uint8_t)count;
+        memcpy(pkt + 4, json + off, n);
+        tx_char->setValue(pkt, n + 4);
+        tx_char->notify();
+    }
 }
 
 void ble_send_ack(void) {

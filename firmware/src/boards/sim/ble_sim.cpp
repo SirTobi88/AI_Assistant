@@ -11,7 +11,7 @@
 #include <string.h>
 
 #define MAX_STATES 64
-#define MAX_LINE   512
+#define MAX_LINE   4096
 
 struct SimState {
     char json[MAX_LINE];
@@ -78,7 +78,7 @@ static void load_scenario(void) {
 
 static void refresh_title(void) {
     char t[96];
-    snprintf(t, sizeof(t), "Clawdmeter sim — %s[%d/%d] %s %s",
+    snprintf(t, sizeof(t), "AI Assistant sim — %s[%d/%d] %s %s",
              connected ? "" : "(disconnected) ",
              cur + 1, n_states, states[cur].name,
              playing ? "\xE2\x96\xB6" : "\xE2\x8F\xB8");
@@ -117,6 +117,7 @@ const char* ble_get_data(void) {
     return states[cur].json;
 }
 void ble_send_ack(void)  {}
+void ble_send_cmd(const char* json) { if (connected) printf("[sim] -> %s\n", json); }
 void ble_send_nack(void) { printf("[sim] payload NACKed — check the scenario JSON\n"); }
 void ble_request_refresh(void) {}
 void ble_set_battery_level(int pct) { (void)pct; }

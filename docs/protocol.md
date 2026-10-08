@@ -59,11 +59,12 @@ Wird beim Verbinden und bei Änderungen gesendet. Der Knob zeigt diese Listen im
 ```json
 {"t":"prompt","id":"p17","sid":"a1b2","k":"perm","ti":"Bash",
  "tx":"git push origin main","o":["Erlauben","Immer erlauben","Ablehnen"],
- "m":0,"d":1,"to":120}
+ "m":0,"d":3,"to":120}
 ```
 - `k`: `perm` (Tool-Freigabe) · `ask` (Rückfrage mit Optionen) · `plan` (Plan annehmen)
 - `ti` Titel, `tx` Text (Bridge kürzt auf ~300 Zeichen), `o` Optionen (max. 8, je ≤ 40 Zeichen)
-- `m` = 1: Mehrfachauswahl; `d` = 1: gefährlich → Bestätigen nur per Hold-to-confirm
+- `m` = 1: Mehrfachauswahl; `d` = Bitmaske der Optionen, die nur per Hold-to-confirm gelten
+  (Bit 0 = erste Option; im Beispiel 3 = „Erlauben“ und „Immer erlauben“, „Ablehnen“ ist ein Tap)
 - `to` = Sekunden bis die Bridge aufgibt und auf den normalen Dialog zurückfällt
 
 Mehrere offene Prompts stehen in einer Warteschlange; der Knob zeigt den ältesten.

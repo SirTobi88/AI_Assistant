@@ -10,3 +10,12 @@
 - Simulator (`-e sim`) emuliert den runden 360×360-Knob; Ring = Pfeil hoch/runter / Mausrad.
   Headless-Screenshot: `SDL_VIDEODRIVER=dummy SIM_AUTOSHOT_MS=5000 .pio/build/sim/program`
 - Tests: `.venv/bin/python -m pytest bridge/tests -q`
+- Simulator-Eingabe per Skript: `SIM_INPUT="1000:d,1600:s,2000:t,3000:h1800"` (u/d = Ring,
+  t = Tap, h<ms> = Halten, s = Screenshot nach `SIM_SHOT_PREFIX-N.bmp`); Ring-Menü-Szenario:
+  `SIM_SCENARIO=sim/app_scenario.jsonl`. Ausgabe nur sichtbar mit `script -q /dev/null …`
+  (stdout ist sonst gepuffert und geht bei Absturz verloren).
+- LVGL nutzt `malloc` (`LV_USE_STDLIB_MALLOC=1`): der feste 64-KB-Pool reichte für Ring-Menü +
+  Usage-Screens nicht, das äußerte sich als Segfault in `lv_draw_sw_arc`.
+- Firmware-Module: `rxq` (Empfang + Zusammensetzen gestückelter Nachrichten, Host-Test in
+  `firmware/test/test_rxq`), `proto` (typisierte Nachrichten → `AppState`, Befehle),
+  `ringmenu` (LVGL-Ring), `app` (Ansichten, Gesten, Prompt-Popup).

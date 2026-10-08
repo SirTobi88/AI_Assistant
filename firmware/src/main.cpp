@@ -15,6 +15,8 @@
 #include "idle.h"
 #include "idle_cfg.h"
 #include "brightness.h"
+#include "app.h"
+#include "proto.h"
 
 #include "hal/board_caps.h"
 #include "hal/display_hal.h"
@@ -368,6 +370,7 @@ void setup() {
 
     ui_init();
     if (board_caps().touch_keys) ui_set_touch_keys(&touch_keys);
+    app_init();
     ui_update_ble_status(ble_get_state(), ble_get_device_name(), ble_get_mac_address());
     ui_update_battery(power_hal_battery_pct(), power_hal_is_charging());
     ui_show_screen(SCREEN_SPLASH);
@@ -523,19 +526,12 @@ void loop() {
             }
         }
 
-        // Rotary ring: the PWR short press in both directions — next/previous
-        // animation on the splash, brighter/darker on the usage view. The
-        // first turn from sleep only wakes, like a first button press.
+        // Rotary ring: drives the ring menu (app.cpp) — the first turn opens
+        // it, brightness lives inside it. The first turn from sleep only
+        // wakes, like a first button press.
         if (board_caps().has_encoder) {
             int steps = input_hal_encoder_steps();
-            if (steps != 0 && !idle_consume_wake_press()) {
-                const bool on_splash = ui_get_current_screen() == SCREEN_SPLASH;
-                const int  dir = steps > 0 ? 1 : -1;
-                for (int n = steps > 0 ? steps : -steps; n > 0; n--) {
-                    if (on_splash) dir > 0 ? splash_next() : splash_prev();
-                    else           brightness_step(dir);
-                }
-            }
+            if (steps != 0 && !idle_consume_wake_press()) app_encoder(steps);
         }
 
         pair_tick();
@@ -585,6 +581,7 @@ void loop() {
         if (last_ble_state == BLE_STATE_CONNECTED) ble_down_since_ms = millis();
         last_ble_state = bs;
         ui_update_ble_status(bs, ble_get_device_name(), ble_get_mac_address());
+        app_set_connected(bs == BLE_STATE_CONNECTED);
     }
 
     // Polled rather than event-driven: this goes true on a failed handshake but
@@ -621,8 +618,17 @@ void loop() {
 
     check_serial_cmd();
 
-    if (ble_has_data()) {
-        if (parse_json(ble_get_data(), &usage)) {
+    app_tick();
+
+    // Typed protocol messages (docs/protocol.md) go to the ring menu; the rest
+    // is the usage payload as before.
+    const char* msg = ble_has_data() ? ble_get_data() : nullptr;
+    proto_result_t pr = msg ? proto_handle(msg, millis()) : PROTO_LEGACY;
+    if (msg && pr != PROTO_LEGACY) {
+        if (pr == PROTO_OK) { app_on_proto(); ble_send_ack(); }
+        else                ble_send_nack();
+    } else if (msg) {
+        if (parse_json(msg, &usage)) {
             int g_before = usage_rate_group();
             bool session_reset = usage_rate_sample(usage.session_pct);
             int g_after = usage_rate_group();
@@ -658,6 +664,7 @@ void loop() {
                 if (splash_is_active()) splash_pick_for_current_rate();
             }
             ui_update(&usage);
+            app_set_usage(&usage);
             ble_send_ack();
         } else {
             ble_send_nack();
