@@ -24,3 +24,27 @@ python3 -m venv .venv && .venv/bin/pip install pytest bleak httpx
 ```
 
 Simulator: Pfeil hoch/runter oder Mausrad = Drehring, Mausklick = Tap.
+
+## Bridge starten und Hooks einrichten
+
+```bash
+.venv/bin/python -m bridge.claude_usage_daemon        # BLE, Limits, Hub-Socket
+.venv/bin/python bridge/clawd_activity.py --install   # Status-Hooks (Sessions, Buddy)
+.venv/bin/python bridge/knob_hook.py --install        # Freigaben/Fragen/Pläne am Knob
+```
+
+Die Hooks tragen sich in `~/.claude/settings.json` ein (fremde Einträge bleiben unberührt,
+`--uninstall` entfernt nur die eigenen). Läuft die Bridge nicht oder ist der Knob nicht
+verbunden, zeigt Claude Code sofort den normalen Dialog.
+
+## Bedienung
+
+| Geste | Wirkung |
+|---|---|
+| Ring drehen | Menü öffnen / Auswahl bewegen |
+| Tap | auswählen |
+| Doppeltap | zurück / schließen |
+| Halten | Push-to-talk (Leertaste an Claude Code) bzw. Bestätigen bei roten Optionen |
+
+Rote Optionen (z. B. „Erlauben“ bei `git push`, `rm -rf`, `sudo`) gelten nur, wenn man hält,
+bis sich der innere Ring gefüllt hat. „Am Rechner“ gibt die Frage an den normalen Dialog zurück.

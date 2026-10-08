@@ -24,6 +24,13 @@ MAX_OPTION_LEN = 40
 MAX_PROMPT_TEXT = 300
 
 SETTING_KEYS = ("model", "effort", "mode", "fast")
+# Session ids go out shortened (Claude's are 36-char UUIDs, the knob keeps 15);
+# the hub maps them back by prefix.
+SID_LEN = 12
+
+
+def short_sid(sid: str) -> str:
+    return (sid or "")[:SID_LEN]
 
 
 def _dumps(obj: dict) -> bytes:
@@ -48,15 +55,16 @@ class Session:
     mode: str = "default"
     fast: bool = False
     unread: bool = False
+    cwd: str = ""                   # bridge-side only (monitor), not sent
 
     def row(self) -> list:
-        return [self.sid, _clip(self.label, 24), self.state, self.ctx_pct, self.model,
+        return [short_sid(self.sid), _clip(self.label, 24), self.state, self.ctx_pct, self.model,
                 self.effort, self.mode, int(self.fast), int(self.unread)]
 
 
 def sessions_msg(sessions: list[Session], active: str | None) -> dict:
     ordered = sorted(sessions, key=lambda s: (s.state not in NEEDS_YOU, not s.unread))
-    return {"t": "sessions", "act": active or "",
+    return {"t": "sessions", "act": short_sid(active or ""),
             "ss": [s.row() for s in ordered[:MAX_SESSIONS]]}
 
 
@@ -81,7 +89,7 @@ class Prompt:
             raise ValueError(f"unknown prompt kind {self.kind!r}")
         if not self.options:
             raise ValueError("prompt needs at least one option")
-        return {"t": "prompt", "id": self.id, "sid": self.sid, "k": self.kind,
+        return {"t": "prompt", "id": self.id, "sid": short_sid(self.sid), "k": self.kind,
                 "ti": _clip(self.title, 40), "tx": _clip(self.text, MAX_PROMPT_TEXT),
                 "o": [_clip(o, MAX_OPTION_LEN) for o in self.options[:MAX_OPTIONS]],
                 "m": int(self.multi), "d": sum(1 << i for i in set(self.confirm) if 0 <= i < MAX_OPTIONS),

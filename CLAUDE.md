@@ -23,3 +23,12 @@
   mehrfach ab (Segfault ohne Ausgabe) — dann `rm -rf firmware/.pio/build/sim` und neu bauen.
 - Schriften: `tools/gen_fonts.py` erzeugt Styrene 12–28 mit Latin-1 + „ “ – — … (Umlaute);
   Zeilenhöhe/Baseline bleiben wie in den alten ASCII-Dateien. Font-Quelle: AI_Limitmeter/assets.
+- Bridge: `claude_usage_daemon.py` (aus Limitmeter) startet `Hub` (Unix-Socket
+  `~/.config/ai-knob/bridge.sock`) und pro BLE-Verbindung einen `KnobLink` (TX-Notify abonniert,
+  gestückelte Writes mit Response, gemeinsamer Lock mit den Usage-Writes). `hub_loop` schickt
+  jede Sekunde Sessions (`sessions.py`: Hook-Dateien + Transcript-Ende) und alle 10 s Monitor-Werte.
+- `knob_hook.py`: PermissionRequest (`--perm`) und PreToolUse für AskUserQuestion/ExitPlanMode
+  (`--pre`), Antwort per `decision` bzw. `permissionDecision` + `updatedInput` (laut Hook-Doku
+  reicht bei diesen Tools `allow` allein nicht). Kein Ergebnis → keine Ausgabe → normaler Dialog.
+- Session-IDs gehen auf 12 Zeichen gekürzt an den Knob (`protocol.short_sid`), der Hub löst sie
+  per Präfix auf. Adapter für switch/set/interrupt ist noch `LoggingAdapter` (Phase 3/4).

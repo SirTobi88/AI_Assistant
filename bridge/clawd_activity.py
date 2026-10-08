@@ -45,8 +45,8 @@ HOOK_MARK = "clawd_activity.py"
 
 # Events the hook is registered for. Tool events get a "*" matcher; the rest
 # take none.
-HOOK_EVENTS = ("UserPromptSubmit", "PreToolUse", "PostToolUse",
-               "PostToolUseFailure", "PermissionRequest",
+HOOK_EVENTS = ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse",
+               "PostToolUseFailure", "PermissionRequest", "PreCompact",
                "Notification", "Stop", "SessionEnd")
 _TOOL_EVENTS = ("PreToolUse", "PostToolUse", "PostToolUseFailure",
                 "PermissionRequest")
@@ -99,6 +99,24 @@ def _state_for(event: dict) -> str | None:
     return None
 
 
+# Session state for the knob's session ring (bridge/protocol.py numbering).
+_PS_STARTING, _PS_IDLE, _PS_THINKING, _PS_TOOL, _PS_COMPACTING = 0, 1, 2, 4, 5
+_PS_PERMISSION, _PS_ASKING, _PS_DONE = 6, 7, 10
+
+
+def _proto_state_for(event: dict, anim: str | None) -> int | None:
+    name = event.get("hook_event_name") or ""
+    if name == "SessionStart":
+        return _PS_IDLE
+    if name == "PreCompact":
+        return _PS_COMPACTING
+    if name == "PreToolUse":
+        return _PS_ASKING if event.get("tool_name") == "AskUserQuestion" else _PS_TOOL
+    if name == "PermissionRequest":
+        return _PS_ASKING if event.get("tool_name") in ("AskUserQuestion", "ExitPlanMode") else _PS_PERMISSION
+    return {"work think": _PS_THINKING, "allow": _PS_PERMISSION, "done": _PS_DONE}.get(anim or "")
+
+
 def handle_hook(raw: str, now: float | None = None,
                 activity_dir: Path = ACTIVITY_DIR) -> None:
     event = json.loads(raw)
@@ -111,12 +129,27 @@ def handle_hook(raw: str, now: float | None = None,
         path.unlink(missing_ok=True)
         return
     state = _state_for(event)
-    if state is None:
+    ps = _proto_state_for(event, state)
+    if state is None and ps is None:
         return
+    try:
+        prev = json.loads(path.read_text())
+    except (OSError, ValueError):
+        prev = {}
+    rec = {**prev, "ts": time.time() if now is None else now}
+    if state is not None:
+        rec["state"] = state
+    rec.setdefault("state", "idle breathe")
+    if ps is not None:
+        rec["ps"] = ps
+    # What the knob's session ring shows besides the state.
+    for src, dst in (("cwd", "cwd"), ("transcript_path", "tp"), ("permission_mode", "mode"),
+                     ("model", "model")):
+        if event.get(src):
+            rec[dst] = event[src] if isinstance(event[src], str) else str(event[src])
     activity_dir.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"state": state,
-                               "ts": time.time() if now is None else now}))
+    tmp.write_text(json.dumps(rec))
     os.replace(tmp, path)
 
 

@@ -25,10 +25,23 @@ from bleak import BleakClient
 from bleak.exc import BleakError
 
 try:
-    from . import clawd_activity, codex_limits
+    from . import clawd_activity, codex_limits, monitor, sessions
+    from .hub import Hub
+    from .link import KnobLink
 except ImportError:  # run as a script, not as the daemon package
     import clawd_activity
     import codex_limits
+    import monitor
+    import sessions
+    from hub import Hub
+    from link import KnobLink
+
+# The knob side (protocol v1): set up in main(), shared by every connection.
+HUB: "Hub | None" = None
+BURN = monitor.BurnTracker()
+_last_usage: dict = {}
+SESSIONS_TICK = 1
+MONITOR_TICK = 10
 
 DEVICE_NAME = "Clawdmeter"
 SERVICE_UUID = "4c41555a-4465-7669-6365-000000000001"
@@ -723,6 +736,9 @@ class Session:
     def __init__(self, client: BleakClient) -> None:
         self.client = client
         self.refresh_requested = asyncio.Event()
+        # Shared with KnobLink once the command channel is up, so a usage write
+        # never lands between two frames of a framed message.
+        self.lock = asyncio.Lock()
 
     def _on_refresh(self, _char, _data: bytearray) -> None:
         log("Refresh requested by device")
@@ -749,8 +765,12 @@ class Session:
     async def write_payload(self, payload: dict) -> bool:
         data = json.dumps(payload, separators=(",", ":")).encode()
         log(f"Sending: {data.decode()}")
+        if "s" in payload:
+            BURN.add(float(payload.get("s") or 0))
+            _last_usage.update(payload)
         try:
-            await self.client.write_gatt_char(RX_CHAR_UUID, data, response=False)
+            async with self.lock:
+                await self.client.write_gatt_char(RX_CHAR_UUID, data, response=False)
             return True
         except BleakError as e:
             log(f"Write failed: {e}")
@@ -879,6 +899,11 @@ async def connect_and_run(target, stop_event: asyncio.Event) -> bool:
     log("Connected")
     session = Session(client)
     await session.setup_refresh_subscription()
+    if HUB is not None:
+        link = KnobLink(client, HUB.on_command, log)
+        if await link.start():
+            session.lock = link.lock
+            await HUB.attach(link)
 
     last_poll = 0.0
     used_successfully = False
@@ -980,6 +1005,8 @@ async def connect_and_run(target, stop_event: asyncio.Event) -> bool:
             except asyncio.TimeoutError:
                 pass
     finally:
+        if HUB is not None:
+            HUB.detach()
         try:
             await client.disconnect()
         except BleakError:
@@ -1002,6 +1029,11 @@ async def main() -> None:
             loop.add_signal_handler(sig, _stop)
         except NotImplementedError:
             signal.signal(sig, _stop)
+
+    global HUB
+    HUB = Hub(log=log)
+    await HUB.start()
+    hub_task = asyncio.create_task(hub_loop(HUB, stop_event))
 
     log("=== Claude Usage Tracker Daemon (BLE, macOS) ===")
     log(f"Poll interval: {POLL_INTERVAL}s")
@@ -1039,6 +1071,33 @@ async def main() -> None:
             backoff = min(backoff * 2, 60)
         else:
             backoff = 1
+
+    hub_task.cancel()
+    await HUB.stop()
+
+
+async def hub_loop(hub: "Hub", stop_event: asyncio.Event) -> None:
+    """Keep the knob's session list and monitor numbers current."""
+    last_monitor = 0.0
+    while not stop_event.is_set():
+        try:
+            await hub.set_sessions(sessions.read_sessions())
+            now = time.time()
+            if hub.connected and hub.active and now - last_monitor >= MONITOR_TICK:
+                last_monitor = now
+                active = next((s for s in hub.sessions if s.sid == hub.active), None)
+                reset = _last_usage.get("sr")
+                msg = await asyncio.to_thread(
+                    monitor.monitor_msg, hub.active, BURN, int(reset) if reset is not None else None,
+                    sessions.context_tokens_k(clawd_activity.ACTIVITY_DIR, hub.active),
+                    active.cwd if active else "")
+                await hub.set_monitor(msg)
+        except Exception as e:  # never let the side loop kill the daemon
+            log(f"hub loop: {e!r}")
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=SESSIONS_TICK)
+        except asyncio.TimeoutError:
+            pass
 
 
 if __name__ == "__main__":
