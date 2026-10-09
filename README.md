@@ -25,7 +25,28 @@ python3 -m venv .venv && .venv/bin/pip install pytest bleak httpx
 
 Simulator: Pfeil hoch/runter oder Mausrad = Drehring, Mausklick = Tap.
 
-## Bridge starten und Hooks einrichten
+## Anbindung an Claude Code: Mod `ai-knob` (empfohlen)
+
+Der Mod (`mod/ai-knob`) läuft in jeder Claude-Code-Session, in der CLI und der Desktop-App, und
+spricht direkt mit der Bridge (`~/.config/ai-knob/mod.sock`):
+
+- Status, Kontext-Füllstand und Limits kommen aus der Session selbst (`$.session.usage()`), ohne
+  eigene API-Abfrage der Bridge.
+- Freigaben, Rückfragen (AskUserQuestion) und Pläne werden am Knob beantwortet. Ohne Bridge, ohne
+  Knob, nach 30 s oder mit „Am Rechner“ entscheidet der normale Dialog.
+- Modell, Reasoning und Fast vom Knob laufen als echte Slash-Commands (`/model`, `/effort`, `/fast`),
+  sobald die Session gerade nichts tut. `/model` speichert das Modell auch als Standard für neue
+  Sessions. Stopp bricht den laufenden Turn ab.
+- Den Modus kann ein Mod nicht umschalten. Dafür gibt es den Tastendruck-Rückfall (`control = keys`).
+
+```bash
+tools/install_mod.sh               # einmal im Terminal: lokaler Marketplace + Installation (User-Scope)
+tools/install_mod.sh --uninstall
+```
+
+Was die Mod-API kann und was gemessen wurde: `docs/mod-api-findings.md`.
+
+## Bridge starten und Hooks einrichten (Rückfall ohne Mod)
 
 ```bash
 .venv/bin/python -m bridge.claude_usage_daemon        # BLE, Limits, Hub-Socket

@@ -1,0 +1,6 @@
+{
+  "name": "ai-knob-local",
+  "description": "Local marketplace for the AI Knob mod",
+  "owner": { "name": "Tobias Weich" },
+  "plugins": [{ "name": "ai-knob", "source": "./" }]
+}

@@ -107,3 +107,21 @@ Mehrere offene Prompts stehen in einer Warteschlange; der Knob zeigt den ältest
 Notify-Rahmen: `[seq u16 LE][IMA-ADPCM 4 bit, 16 kHz mono]`. Erster Rahmen nach `ptt on`
 beginnt mit `seq = 0` und trägt im Kopf zusätzlich `predictor i16, index u8`.
 ~64 kbit/s, passt in BLE 2M PHY mit großer MTU.
+
+## Mod-Endpunkt (Claude-Code-Mod ⇄ Bridge)
+
+HTTP/1.1 über den Unix-Socket `~/.config/ai-knob/mod.sock` (`bridge/mod_server.py`), ein Request
+pro Verbindung, JSON-Bodies. Der Mod (`mod/ai-knob`) nutzt `$.http.fetch(url, { socketPath })`.
+
+| Request | Inhalt | Antwort |
+|---|---|---|
+| `POST /v1/hello` | `{sid, cwd, title, entrypoint, version}` | `{ok, knob}` |
+| `POST /v1/state` | `{sid, state, model, effort, mode, fast, ctx_pct, tokens, rate_limits, cwd, title}` | `{ok, knob}` |
+| `GET /v1/commands?sid=…&wait=25` | Long-Poll | `{commands: [{t:"set",key,value} \| {t:"interrupt"} \| {t:"prompt",text}], knob}` |
+| `POST /v1/result` | `{sid, cmd, ok, error}` | `{ok}` |
+| `POST /v1/ask` | `{sid, what: "permission"\|"question"\|"plan", tool, input, suggestions}` | `{decision}` / `{answers}` / `{verdict}`, jeweils `null` = normaler Dialog |
+| `POST /v1/bye` | `{sid}` | `{ok}` |
+
+`state` nummeriert wie bei `sessions`. Ohne Heartbeat (alle 10 s) gilt eine Session nach 60 s als
+beendet. `rate_limits` ist `$.session.usage().rateLimits`; solange ein Mod frische Werte meldet,
+baut die Bridge daraus die Limit-Payload statt die API abzufragen.

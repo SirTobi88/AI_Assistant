@@ -48,3 +48,10 @@
   Desktop (`CLAUDE_CODE_ENTRYPOINT=claude-desktop`) = Menüs Cmd+Shift+I/E/M + Ziffer, wirkt auf die
   sichtbare Session. Pläne sind Daten (`plan_set` …) und werden als Text getestet; nie in Tests
   Tastendrücke senden. `osacompile` prüft die Syntax, ohne auszuführen.
+- **Mod `ai-knob`** (`mod/ai-knob`, primäre Anbindung): TypeScript-Hooks-Modul, spricht HTTP über
+  `~/.config/ai-knob/mod.sock` mit `bridge/mod_server.py` (Registry, Befehls-Queues, `/v1/ask`).
+  Die Frage-/Freigabe-Logik bleibt in Python (`bridge/prompts.py`, geteilt mit `knob_hook.py`).
+  Prüfen: `claude plugin validate mod/ai-knob`, `claude plugin test mod/ai-knob` (Test-Kit: `$`-Aufrufe
+  per `on('http.fetch'|'session.id'|…)` mit `{ value }` beantworten, `tool.call` mit `{ result }`).
+  Validator: Ereignisname als Literal, Hook als Funktionsliteral, `$` nur an oben deklarierte
+  Funktionen. Gemessene API-Fakten: `docs/mod-api-findings.md`. Installation: `tools/install_mod.sh`.
