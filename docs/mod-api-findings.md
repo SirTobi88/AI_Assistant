@@ -27,7 +27,9 @@ Session der Desktop-App. Typen: `plugin-authoring/types/claude-code.d.ts` des Bu
 | AskUserQuestion über `classic.PreToolUse` → `{allow, updatedInput.answers}` | Antwort am Simulator („Orange“, 25 s) kam in der Session an, **kein Dialog** am Rechner |
 | Reasoning vom Knob → `$.command.run({command:'effort', args:'high'})` | ausgeführt nach Ende des Turns, Ausgabe „Set effort level to high (this session only)“: `/effort` wirkt nur auf die Session |
 | Freigabe (`classic.PermissionRequest`) | noch nicht live (Session im Auto-Modus) |
-| Modell vom Knob | noch nicht live (`/model X` speichert X laut Doku auch als Standard) |
+| Modell vom Knob → `/model sonnet`, `/model opus` | „Set model to … for this session only“: in der Desktop-Session **kein** neuer Standard |
+| Fast vom Knob → `/fast on` | „Fast mode is not available in the Agent SDK“: in Desktop-Sessions nicht verfügbar, `/fast off` geht |
+| Effort `max`, `medium` | ausgeführt, jeweils nur für die Session |
 
 ## Folgerungen
 - Status, Kontext, Limits, Modell/Effort/Fast, Stopp und Prompts: direkt im Mod.

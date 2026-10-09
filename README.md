@@ -35,8 +35,8 @@ spricht direkt mit der Bridge (`~/.config/ai-knob/mod.sock`):
 - Freigaben, Rückfragen (AskUserQuestion) und Pläne werden am Knob beantwortet. Ohne Bridge, ohne
   Knob, nach 30 s oder mit „Am Rechner“ entscheidet der normale Dialog.
 - Modell, Reasoning und Fast vom Knob laufen als echte Slash-Commands (`/model`, `/effort`, `/fast`),
-  sobald die Session gerade nichts tut. `/model` speichert das Modell auch als Standard für neue
-  Sessions. Stopp bricht den laufenden Turn ab.
+  sobald die Session gerade nichts tut, jeweils nur für diese Session. Fast gibt es in Desktop-Sessions
+  nicht (Agent SDK). Stopp bricht den laufenden Turn ab.
 - Den Modus kann ein Mod nicht umschalten. Dafür gibt es den Tastendruck-Rückfall (`control = keys`).
 
 ```bash
