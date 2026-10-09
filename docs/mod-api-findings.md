@@ -18,6 +18,17 @@ Session der Desktop-App. Typen: `plugin-authoring/types/claude-code.d.ts` des Bu
 | `$.env.get('CLAUDE_EFFORT')` | im Mod nicht gesetzt (Effort aus `classic.UserPromptSubmit.effort`) |
 | `$.env.get('CLAUDE_CODE_ENTRYPOINT')` | `claude-desktop` |
 
+## Live-Test mit dem Mod `ai-knob` (Desktop-Session, virtueller Knob, 2026-10-09)
+
+| Prüfpunkt | Ergebnis |
+|---|---|
+| Anmeldung | `hello` 17 s nach dem Laden, Heartbeat läuft |
+| Limits aus dem Mod | Bridge mit `--no-usage` schickt 5h/7d aus `rateLimits` (43 % / 45 %) an den Knob |
+| AskUserQuestion über `classic.PreToolUse` → `{allow, updatedInput.answers}` | Antwort am Simulator („Orange“, 25 s) kam in der Session an, **kein Dialog** am Rechner |
+| Reasoning vom Knob → `$.command.run({command:'effort', args:'high'})` | ausgeführt nach Ende des Turns, Ausgabe „Set effort level to high (this session only)“: `/effort` wirkt nur auf die Session |
+| Freigabe (`classic.PermissionRequest`) | noch nicht live (Session im Auto-Modus) |
+| Modell vom Knob | noch nicht live (`/model X` speichert X laut Doku auch als Standard) |
+
 ## Folgerungen
 - Status, Kontext, Limits, Modell/Effort/Fast, Stopp und Prompts: direkt im Mod.
 - **Modus der laufenden Session**: kein direkter Weg. Möglich sind `setMode` (Ziel `session`) als Teil
