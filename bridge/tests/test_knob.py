@@ -183,9 +183,9 @@ def test_commands_resolve_short_session_ids():
     calls = []
 
     class A:
-        def switch(self, sid): calls.append(("switch", sid))
-        def set(self, sid, k, v): calls.append(("set", sid, k, v))
-        def interrupt(self, sid): calls.append(("int", sid))
+        def switch(self, s): calls.append(("switch", s.sid)); return True
+        def set(self, s, k, v): calls.append(("set", s.sid, k, v, getattr(s, k))); return True
+        def interrupt(self, s): calls.append(("int", s.sid)); return True
 
     async def go():
         hub = Hub(adapter=A(), log=lambda m: None, socket_path=Path("/tmp/unused.sock"))
@@ -196,15 +196,17 @@ def test_commands_resolve_short_session_ids():
         hub.on_command(protocol.Command("set", {"sid": short, "key": "model", "value": "sonnet"}))
         hub.on_command(protocol.Command("interrupt", {"sid": "nope"}))
         await asyncio.sleep(0)
-        assert calls == [("switch", full), ("set", full, "model", "sonnet")]
+        # the adapter saw the value before the change
+        assert calls == [("switch", full), ("set", full, "model", "sonnet", "")]
         assert hub.active == full and hub.sessions[0].model == "sonnet"
     asyncio.run(go())
 
 
 # ---- sessions from hook files + transcripts
 
-def _hook(tmp, **ev):
-    knob_activity.handle_hook(json.dumps({"session_id": "abc", **ev}), now=1000.0, activity_dir=tmp)
+def _hook(tmp, env=None, **ev):
+    knob_activity.handle_hook(json.dumps({"session_id": "abc", **ev}), now=1000.0, activity_dir=tmp,
+                              environ=env or {})
 
 
 def test_sessions_from_hooks_and_transcript(tmp_path):
@@ -270,3 +272,24 @@ def test_installers_leave_clawdmeter_hooks_alone(tmp_path):
 
 def test_own_activity_dir():
     assert knob_activity.ACTIVITY_DIR.parts[-2:] == ("ai-knob", "activity")
+
+
+def test_hook_records_where_the_session_runs(tmp_path):
+    _hook(tmp_path, env={"CLAUDE_CODE_ENTRYPOINT": "cli", "CLAUDE_PID": "4242", "CLAUDE_EFFORT": "high"},
+          hook_event_name="SessionStart", cwd="/r")
+    [s] = sessions.read_sessions(tmp_path, now=1000.0)
+    assert (s.entrypoint, s.pid, s.effort) == ("cli", 4242, "high")
+
+
+def test_failed_control_reverts_the_knob():
+    async def go():
+        hub = Hub(log=lambda m: None, socket_path=Path("/tmp/unused.sock"))   # LoggingAdapter: fails
+        link = FakeLink()
+        await hub.attach(link)
+        await hub.set_sessions([protocol.Session("abcdef0123456789", "r", fast=False)])
+        n = len(link.sent)
+        hub.on_command(protocol.Command("set", {"sid": "abcdef012345", "key": "fast", "value": True}))
+        await asyncio.sleep(0.01)
+        assert hub.sessions[0].fast is False
+        assert link.sent[n]["t"] == "sessions" and link.sent[n]["ss"][0][7] == 0
+    asyncio.run(go())

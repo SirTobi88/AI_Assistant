@@ -120,7 +120,7 @@ def _proto_state_for(event: dict, anim: str | None) -> int | None:
 
 
 def handle_hook(raw: str, now: float | None = None,
-                activity_dir: Path = ACTIVITY_DIR) -> None:
+                activity_dir: Path = ACTIVITY_DIR, environ: dict | None = None) -> None:
     event = json.loads(raw)
     sid = "".join(c for c in str(event.get("session_id") or "")
                   if c.isalnum() or c in "-_")
@@ -149,6 +149,15 @@ def handle_hook(raw: str, now: float | None = None,
                      ("model", "model")):
         if event.get(src):
             rec[dst] = event[src] if isinstance(event[src], str) else str(event[src])
+    # Where the session runs and how to reach it (bridge/control.py): Claude
+    # Code exports these to its hooks. The hook's parent is the claude process.
+    env = os.environ if environ is None else environ
+    rec["ep"] = env.get("CLAUDE_CODE_ENTRYPOINT", rec.get("ep", ""))
+    pid = env.get("CLAUDE_PID") or (str(os.getppid()) if environ is None else "")
+    if pid.isdigit():
+        rec["pid"] = int(pid)
+    if env.get("CLAUDE_EFFORT"):
+        rec["effort"] = env["CLAUDE_EFFORT"]
     activity_dir.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(rec))

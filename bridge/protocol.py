@@ -55,7 +55,10 @@ class Session:
     mode: str = "default"
     fast: bool = False
     unread: bool = False
-    cwd: str = ""                   # bridge-side only (monitor), not sent
+    # bridge-side only, not sent: monitor + control
+    cwd: str = ""
+    entrypoint: str = ""            # CLAUDE_CODE_ENTRYPOINT, e.g. "cli" or "claude-desktop"
+    pid: int = 0                    # the claude process (its tty is where keystrokes go)
 
     def row(self) -> list:
         return [short_sid(self.sid), _clip(self.label, 24), self.state, self.ctx_pct, self.model,

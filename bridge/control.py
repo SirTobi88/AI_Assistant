@@ -1,0 +1,283 @@
+"""Carry out knob commands (model, effort, mode, fast, interrupt, switch) on a
+running Claude Code session — by typing into it, because neither the CLI nor
+the desktop app has an outside API for this.
+
+* CLI in Terminal.app: find the tab by the session's tty, bring it to the
+  front, then keystrokes. Commands are typed as slash commands after clearing
+  the input line (Ctrl+E, Ctrl+U — Claude Code keeps the cleared draft for
+  Ctrl+Y); /model, /effort and /fast run immediately even mid-turn. Mode:
+  Shift+Tab as often as the cycle needs. Interrupt: Esc.
+* Desktop app: bring it to the front and use its menus (Cmd+Shift+I model,
+  Cmd+Shift+E effort, Cmd+Shift+M mode, then a digit), Esc to stop. No text is
+  typed, so a draft in the prompt box stays. It acts on the session that is
+  showing — the app has no way to pick a session from outside.
+
+Needs the Accessibility permission (System Settings > Privacy & Security >
+Accessibility) for whatever runs the bridge. Off unless ``control = keys`` is
+set in ~/.config/ai-knob/config.
+
+Values are checked against allowlists before anything is typed: the knob
+must never be able to type arbitrary text into a session.
+"""
+from __future__ import annotations
+
+import re
+import subprocess
+from dataclasses import dataclass, field
+from pathlib import Path
+
+CONFIG_FILE = Path.home() / ".config" / "ai-knob" / "config"
+
+MODEL_ALIASES = {"default", "best", "fable", "opus", "sonnet", "haiku", "opusplan",
+                 "sonnet[1m]", "opus[1m]", "opusplan[1m]"}
+MODEL_ID = re.compile(r"^claude-[a-z0-9-]+(\[1m\])?$")
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+# Shift+Tab order in the CLI (bypassPermissions only when it is enabled; left out).
+CLI_MODE_CYCLE = ("default", "acceptEdits", "plan", "auto")
+
+# Desktop menus: item order -> digit. Defaults from the docs' order; check them
+# in the app and override in the config (desktop_models / desktop_efforts /
+# desktop_modes = comma-separated, in menu order).
+DESKTOP_MODELS = ("default", "fable", "opus", "sonnet", "haiku")
+DESKTOP_EFFORTS = EFFORTS
+DESKTOP_MODES = ("default", "acceptEdits", "plan", "auto", "bypassPermissions")
+
+KEY_ESC, KEY_RETURN, KEY_TAB = 53, 36, 48
+
+
+class Unsupported(Exception):
+    """This command can't be carried out for this session."""
+
+
+@dataclass
+class Target:
+    kind: str                 # "terminal" | "desktop"
+    tty: str = ""             # /dev/ttysNNN for terminal sessions
+
+
+@dataclass
+class Plan:
+    """What to do, as data (tested without touching the machine)."""
+    focus: tuple = ()                         # ("terminal", tty) | ("desktop",)
+    keys: list = field(default_factory=list)  # ("text", s) | ("code", n, mods) | ("char", c, mods)
+
+
+def valid_model(v: str) -> bool:
+    return v in MODEL_ALIASES or bool(MODEL_ID.match(v))
+
+
+def read_config(path: Path | None = None) -> dict:
+    out = {}
+    path = path or CONFIG_FILE
+    try:
+        for line in path.read_text().splitlines():
+            line = line.split("#", 1)[0].strip()
+            if "=" in line:
+                k, v = line.split("=", 1)
+                out[k.strip().lower()] = v.strip()
+    except OSError:
+        pass
+    return out
+
+
+def _order(cfg: dict, key: str, default: tuple) -> tuple:
+    v = cfg.get(key)
+    return tuple(x.strip() for x in v.split(",") if x.strip()) if v else default
+
+
+def _clear_line() -> list:
+    return [("char", "e", ("control",)), ("char", "u", ("control",)),
+            ("char", "u", ("control",)), ("char", "u", ("control",))]
+
+
+def _slash(cmd: str) -> list:
+    return _clear_line() + [("text", cmd), ("code", KEY_RETURN, ())]
+
+
+def _menu(letter: str, items: tuple, value: str) -> list:
+    if value not in items:
+        raise Unsupported(f"{value} is not in the desktop menu {items}")
+    idx = items.index(value) + 1
+    if idx > 9:
+        raise Unsupported("menu item beyond 9")
+    return [("char", letter, ("command", "shift")), ("delay", 0.3), ("char", str(idx), ())]
+
+
+def plan_set(target: Target, key: str, value, current: dict, cfg: dict | None = None) -> Plan:
+    """``current`` holds the session's mode/fast before the change."""
+    cfg = cfg or {}
+    if target.kind == "terminal":
+        focus = ("terminal", target.tty)
+        if key == "model":
+            if not valid_model(str(value)):
+                raise Unsupported(f"model {value!r} not allowed")
+            return Plan(focus, _slash(f"/model {value}"))
+        if key == "effort":
+            if value not in EFFORTS:
+                raise Unsupported(f"effort {value!r} not allowed")
+            return Plan(focus, _slash(f"/effort {value}"))
+        if key == "fast":
+            if bool(value) == bool(current.get("fast")):
+                return Plan(focus, [])
+            return Plan(focus, _slash("/fast"))
+        if key == "mode":
+            cur = current.get("mode") or "default"
+            if value not in CLI_MODE_CYCLE or cur not in CLI_MODE_CYCLE:
+                raise Unsupported(f"mode {cur} -> {value} not in the Shift+Tab cycle")
+            n = (CLI_MODE_CYCLE.index(value) - CLI_MODE_CYCLE.index(cur)) % len(CLI_MODE_CYCLE)
+            return Plan(focus, [("code", KEY_TAB, ("shift",))] * n)
+    elif target.kind == "desktop":
+        focus = ("desktop",)
+        if key == "model":
+            return Plan(focus, _menu("i", _order(cfg, "desktop_models", DESKTOP_MODELS), str(value)))
+        if key == "effort":
+            return Plan(focus, _menu("e", _order(cfg, "desktop_efforts", DESKTOP_EFFORTS), str(value)))
+        if key == "mode":
+            return Plan(focus, _menu("m", _order(cfg, "desktop_modes", DESKTOP_MODES), str(value)))
+        if key == "fast":
+            raise Unsupported("the desktop app has no shortcut for fast mode")
+    raise Unsupported(f"{key} for {target.kind}")
+
+
+def plan_interrupt(target: Target) -> Plan:
+    focus = ("terminal", target.tty) if target.kind == "terminal" else ("desktop",)
+    return Plan(focus, [("code", KEY_ESC, ())])
+
+
+def plan_switch(target: Target) -> Plan:
+    return Plan(("terminal", target.tty) if target.kind == "terminal" else ("desktop",), [])
+
+
+# ---------------------------------------------------------------- AppleScript
+
+def _q(s: str) -> str:
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _mods(mods: tuple) -> str:
+    return f" using {{{', '.join(m + ' down' for m in mods)}}}" if mods else ""
+
+
+def applescript(plan: Plan) -> str:
+    lines = []
+    if plan.focus[:1] == ("terminal",):
+        tty = plan.focus[1]
+        if not re.fullmatch(r"/dev/ttys\d+", tty or ""):
+            raise Unsupported(f"no usable tty ({tty!r})")
+        lines += [
+            'tell application "Terminal"',
+            "  set found to false",
+            "  repeat with w in windows",
+            "    repeat with t in tabs of w",
+            f"      if tty of t is {_q(tty)} then",
+            "        set selected of t to true",
+            "        set index of w to 1",
+            "        set found to true",
+            "        exit repeat",
+            "      end if",
+            "    end repeat",
+            "    if found then exit repeat",
+            "  end repeat",
+            '  if not found then error "Terminal tab not found" number 1001',
+            "  activate",
+            "end tell",
+        ]
+        proc = "Terminal"
+    elif plan.focus == ("desktop",):
+        lines += ['tell application "Claude" to activate']
+        proc = "Claude"
+    else:
+        raise Unsupported("no focus target")
+    if plan.keys:
+        lines += ["delay 0.25", f'tell application "System Events" to tell process {_q(proc)}']
+        for k in plan.keys:
+            if k[0] == "text":
+                lines.append(f"  keystroke {_q(k[1])}")
+            elif k[0] == "char":
+                lines.append(f"  keystroke {_q(k[1])}{_mods(k[2])}")
+            elif k[0] == "code":
+                lines.append(f"  key code {int(k[1])}{_mods(k[2])}")
+            elif k[0] == "delay":
+                lines.append(f"  delay {float(k[1])}")
+            lines.append("  delay 0.05")
+        lines.append("end tell")
+    return "\n".join(lines) + "\n"
+
+
+def tty_of(pid: int) -> str:
+    try:
+        out = subprocess.run(["ps", "-o", "tty=", "-p", str(int(pid))], capture_output=True,
+                             text=True, timeout=3).stdout.strip()
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return ""
+    return f"/dev/{out}" if out and out not in ("??", "-") else ""
+
+
+def target_for(session) -> Target:
+    if getattr(session, "entrypoint", "") == "claude-desktop":
+        return Target("desktop")
+    if getattr(session, "pid", 0):
+        tty = tty_of(session.pid)
+        if tty:
+            return Target("terminal", tty)
+    raise Unsupported("session has no terminal to type into (not started from Terminal.app?)")
+
+
+ASSISTIVE_HINT = ("macOS refused the keystrokes: give the app running the bridge Accessibility "
+                  "access (System Settings > Privacy & Security > Accessibility)")
+
+
+class KeystrokeAdapter:
+    def __init__(self, log=print, run=None, cfg: dict | None = None) -> None:
+        self.log = log
+        self.cfg = cfg if cfg is not None else read_config()
+        self._run = run or self._osascript
+
+    def _osascript(self, script: str) -> None:
+        r = subprocess.run(["osascript", "-"], input=script, capture_output=True, text=True, timeout=10)
+        if r.returncode != 0:
+            err = r.stderr.strip()
+            if "1002" in err or "1719" in err or "assistive" in err.lower() or "not allowed" in err.lower():
+                raise Unsupported(ASSISTIVE_HINT)
+            raise Unsupported(err or "osascript failed")
+
+    def _do(self, what: str, plan: Plan) -> bool:
+        try:
+            self._run(applescript(plan))
+            self.log(f"control: {what}")
+            return True
+        except (Unsupported, OSError, subprocess.SubprocessError) as e:
+            self.log(f"control: {what} not done: {e}")
+            return False
+
+    def switch(self, session) -> bool:
+        try:
+            return self._do(f"show {session.label}", plan_switch(target_for(session)))
+        except Unsupported as e:
+            self.log(f"control: show {session.label} not done: {e}")
+            return False
+
+    def set(self, session, key: str, value) -> bool:
+        try:
+            plan = plan_set(target_for(session), key, value,
+                            {"mode": session.mode, "fast": session.fast}, self.cfg)
+        except Unsupported as e:
+            self.log(f"control: {key}={value} for {session.label} not done: {e}")
+            return False
+        return self._do(f"{key}={value} for {session.label}", plan)
+
+    def interrupt(self, session) -> bool:
+        try:
+            return self._do(f"interrupt {session.label}", plan_interrupt(target_for(session)))
+        except Unsupported as e:
+            self.log(f"control: interrupt {session.label} not done: {e}")
+            return False
+
+
+def adapter_from_config(log=print):
+    cfg = read_config()
+    if cfg.get("control", "off").lower() == "keys":
+        log("Knob control: keystrokes (Terminal.app / desktop app)")
+        return KeystrokeAdapter(log, cfg=cfg)
+    log("Knob control off (set control = keys in ~/.config/ai-knob/config to enable)")
+    return None

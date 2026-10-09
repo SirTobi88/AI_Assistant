@@ -103,7 +103,8 @@ def read_sessions(activity_dir: Path = knob_activity.ACTIVITY_DIR,
         out.append((ts, protocol.Session(
             sid=f.stem, label=Path(cwd).name or f.stem[:8], state=state, ctx_pct=ctx,
             model=short_model(model), effort=str(d.get("effort") or ""),
-            mode=str(d.get("mode") or "default"), cwd=cwd)))
+            mode=str(d.get("mode") or "default"), cwd=cwd,
+            entrypoint=str(d.get("ep") or ""), pid=int(d.get("pid") or 0))))
     out.sort(key=lambda t: -t[0])
     return [s for _, s in out]
 

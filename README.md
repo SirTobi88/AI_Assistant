@@ -56,6 +56,28 @@ Klick = Tap, gedrückt halten = Halten. Mit installiertem `knob_hook.py` landen 
 Fragen echter Claude-Code-Sessions im Simulator. End-to-End-Test:
 `.venv/bin/python -m pytest bridge/tests/test_e2e_virtual.py`.
 
+## Sessions steuern (Modell, Reasoning, Modus, Fast, Stopp)
+
+Weder die CLI noch die Desktop-App bieten dafür eine Schnittstelle. Die Bridge tippt deshalb
+in die Session, abgeschaltet bis `control = keys` in `~/.config/ai-knob/config` steht:
+
+| | CLI in Terminal.app | Desktop-App |
+|---|---|---|
+| Ziel | Tab mit dem TTY der Session (wird nach vorn geholt) | App nach vorn, **die gerade sichtbare Session** |
+| Modell / Reasoning | Zeile leeren (Ctrl+E, Ctrl+U), `/model …` / `/effort …` + Enter | Menü Cmd+Shift+I / Cmd+Shift+E + Ziffer |
+| Modus | Shift+Tab so oft wie nötig | Menü Cmd+Shift+M + Ziffer |
+| Fast | `/fast` (nur wenn der Zustand abweicht) | nicht möglich |
+| Stopp | Esc | Esc |
+| Session wechseln | Tab nach vorn holen | App nach vorn |
+
+- Nötig ist das Bedienungshilfen-Recht (Systemeinstellungen → Datenschutz & Sicherheit →
+  Bedienungshilfen) für die App, die die Bridge startet. Fehlt es, steht das im Log.
+- In der CLI geht ein halb getippter Entwurf beim Leeren nicht verloren: Ctrl+Y holt ihn zurück.
+- Die Menü-Reihenfolge der Desktop-App ist aus der Doku übernommen und noch nicht am echten
+  Menü geprüft; abweichende Reihenfolge in der Konfiguration eintragen (siehe `config.example`).
+- Werte vom Knob werden gegen feste Listen geprüft, bevor etwas getippt wird.
+- Klappt ein Umschalten nicht, nimmt der Knob die Anzeige zurück.
+
 ## Bedienung
 
 | Geste | Wirkung |

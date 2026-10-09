@@ -23,31 +23,35 @@ except ImportError:  # run as a script
     import protocol
     from knob_hook import SOCKET_PATH
 
-DEFAULT_MODELS = ["opus", "sonnet", "haiku"]
+DEFAULT_MODELS = ["fable", "opus", "sonnet", "haiku"]
 DEFAULT_EFFORTS = ["low", "medium", "high", "xhigh", "max"]
 DEFAULT_MODES = ["default", "plan", "acceptEdits", "auto"]
 
 
 class Adapter(_Protocol):
-    """What the knob can make a Claude session do. Implementations: CLI, desktop app."""
-    def switch(self, sid: str) -> None: ...
-    def set(self, sid: str, key: str, value) -> None: ...
-    def interrupt(self, sid: str) -> None: ...
+    """What the knob can make a Claude session do (control.KeystrokeAdapter).
+    Gets the session as it was before the change; returns whether it worked."""
+    def switch(self, session: protocol.Session) -> bool: ...
+    def set(self, session: protocol.Session, key: str, value) -> bool: ...
+    def interrupt(self, session: protocol.Session) -> bool: ...
 
 
 class LoggingAdapter:
-    """Until a real adapter exists: say what would have happened."""
+    """Control switched off: say what would have happened."""
     def __init__(self, log=print) -> None:
         self.log = log
 
-    def switch(self, sid: str) -> None:
-        self.log(f"adapter: switch to {sid} (not implemented)")
+    def switch(self, session) -> bool:
+        self.log(f"control off: would show {session.label}")
+        return False
 
-    def set(self, sid: str, key: str, value) -> None:
-        self.log(f"adapter: set {key}={value} for {sid} (not implemented)")
+    def set(self, session, key: str, value) -> bool:
+        self.log(f"control off: would set {key}={value} for {session.label}")
+        return False
 
-    def interrupt(self, sid: str) -> None:
-        self.log(f"adapter: interrupt {sid} (not implemented)")
+    def interrupt(self, session) -> bool:
+        self.log(f"control off: would interrupt {session.label}")
+        return False
 
 
 class Hub:
@@ -170,20 +174,23 @@ class Hub:
                 if all(c < len(prompt.options) for c in a["choices"]):
                     entry[1].set_result(a["choices"])
             return
+        session = next((s for s in self.sessions if s.sid == a.get("sid")), None)
         if cmd.t == "switch":
             self.active = a["sid"]
-            self.adapter.switch(a["sid"])
+            self.adapter.switch(session)
             asyncio.ensure_future(self.publish_sessions())
             return
         if cmd.t == "set":
-            for s in self.sessions:
-                if s.sid == a["sid"]:
-                    setattr(s, a["key"], a["value"])
-            self.adapter.set(a["sid"], a["key"], a["value"])
+            # The adapter sees the old values (mode cycle, fast toggle); the
+            # list shows the new one right away and the next hook event confirms.
+            if self.adapter.set(session, a["key"], a["value"]):
+                setattr(session, a["key"], a["value"])
+            # Resend either way: on failure this undoes the knob's optimistic change.
+            self._last_sessions_msg = None
             asyncio.ensure_future(self.publish_sessions())
             return
         if cmd.t == "interrupt":
-            self.adapter.interrupt(a["sid"])
+            self.adapter.interrupt(session)
             return
         if cmd.t == "hello":
             self.log(f"Knob says hello: protocol {a.get('v')}, firmware {a.get('fw')}")

@@ -25,12 +25,13 @@ from bleak import BleakClient
 from bleak.exc import BleakError
 
 try:
-    from . import knob_activity, codex_limits, monitor, sessions, virtual_knob
+    from . import knob_activity, codex_limits, control, monitor, sessions, virtual_knob
     from .hub import Hub
     from .link import KnobLink
 except ImportError:  # run as a script, not as the daemon package
     import knob_activity
     import codex_limits
+    import control
     import monitor
     import sessions
     import virtual_knob
@@ -1047,7 +1048,8 @@ async def main() -> None:
             signal.signal(sig, _stop)
 
     global HUB
-    HUB = Hub(log=log, **({"socket_path": HUB_SOCKET} if HUB_SOCKET else {}))
+    HUB = Hub(adapter=control.adapter_from_config(log), log=log,
+              **({"socket_path": HUB_SOCKET} if HUB_SOCKET else {}))
     await HUB.start()
     hub_task = asyncio.create_task(hub_loop(HUB, stop_event))
 

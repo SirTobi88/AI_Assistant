@@ -83,3 +83,16 @@ chime = off
 # percent of the board's full level. Takes effect with the next poll and is
 # remembered by the device across reboots.
 # volume = 70
+
+# ---- AI Knob: control sessions from the knob -----------------------------
+# Model, reasoning, mode, fast and stop are carried out by typing into the
+# session (there is no outside API): Terminal.app tab found by its tty, or the
+# desktop app's menus (acts on the session that is showing). Needs the
+# Accessibility permission for the app that runs the bridge.
+#   control = keys      # off by default
+#
+# Desktop menu order (Cmd+Shift+I / E / M, items picked by digit). Check the
+# order in your app and correct it here if it differs:
+#   desktop_models  = default, fable, opus, sonnet, haiku
+#   desktop_efforts = low, medium, high, xhigh, max
+#   desktop_modes   = default, acceptEdits, plan, auto, bypassPermissions

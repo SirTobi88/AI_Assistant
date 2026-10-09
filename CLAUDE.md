@@ -42,3 +42,9 @@
   (Empfang über die echte `rxq`, Senden gestückelt wie `ble.cpp`). Daemon-Optionen:
   `--virtual [pfad]`, `--no-usage` (keine API-Abfrage, für Tests), `--hub-socket`.
   Start: `tools/virtual_knob.sh`. E2E-Test: `bridge/tests/test_e2e_virtual.py` (braucht Sim-Build).
+- Session-Steuerung: `bridge/control.py` (`KeystrokeAdapter`, an mit `control = keys`). Kein
+  offizielles API → AppleScript/System Events: CLI = Terminal.app-Tab per TTY (aus `ps` der
+  `pid`, die `knob_activity.py` aus `CLAUDE_PID` aufzeichnet) + Slash-Commands bzw. Shift+Tab/Esc;
+  Desktop (`CLAUDE_CODE_ENTRYPOINT=claude-desktop`) = Menüs Cmd+Shift+I/E/M + Ziffer, wirkt auf die
+  sichtbare Session. Pläne sind Daten (`plan_set` …) und werden als Text getestet; nie in Tests
+  Tastendrücke senden. `osacompile` prüft die Syntax, ohne auszuführen.
