@@ -25,7 +25,7 @@ from bleak import BleakClient
 from bleak.exc import BleakError
 
 try:
-    from . import knob_activity, codex_limits, monitor, sessions
+    from . import knob_activity, codex_limits, monitor, sessions, virtual_knob
     from .hub import Hub
     from .link import KnobLink
 except ImportError:  # run as a script, not as the daemon package
@@ -33,6 +33,7 @@ except ImportError:  # run as a script, not as the daemon package
     import codex_limits
     import monitor
     import sessions
+    import virtual_knob
     from hub import Hub
     from link import KnobLink
 
@@ -899,6 +900,17 @@ async def connect_and_run(target, stop_event: asyncio.Event) -> bool:
         return False
 
     log("Connected")
+    return await run_session(client, stop_event)
+
+
+# Set by --no-usage: no API poll (tests, or when the Clawdmeter daemon already
+# polls the same account); the knob then shows "No data" for the limits.
+USAGE_POLL = True
+
+
+async def run_session(client, stop_event: asyncio.Event) -> bool:
+    """Drive one connected knob — a BleakClient, or virtual_knob.SocketClient
+    for the simulator — until it goes away or we are stopped."""
     session = Session(client)
     await session.setup_refresh_subscription()
     if HUB is not None:
@@ -921,7 +933,9 @@ async def connect_and_run(target, stop_event: asyncio.Event) -> bool:
         while client.is_connected and not stop_event.is_set():
             now = time.time()
             elapsed = now - last_poll
-            if session.refresh_requested.is_set() or elapsed >= POLL_INTERVAL:
+            if not USAGE_POLL:
+                session.refresh_requested.clear()
+            elif session.refresh_requested.is_set() or elapsed >= POLL_INTERVAL:
                 session.refresh_requested.clear()
                 # Pure free-ride: read whatever access token(s) Claude Code
                 # currently holds across the configured config dirs and NEVER
@@ -1033,9 +1047,16 @@ async def main() -> None:
             signal.signal(sig, _stop)
 
     global HUB
-    HUB = Hub(log=log)
+    HUB = Hub(log=log, **({"socket_path": HUB_SOCKET} if HUB_SOCKET else {}))
     await HUB.start()
     hub_task = asyncio.create_task(hub_loop(HUB, stop_event))
+
+    if VIRTUAL_SOCKET is not None:
+        log(f"=== AI Knob bridge, virtual knob on {VIRTUAL_SOCKET} ===")
+        await virtual_knob.serve(VIRTUAL_SOCKET, run_session, stop_event, log)
+        hub_task.cancel()
+        await HUB.stop()
+        return
 
     log("=== Claude Usage Tracker Daemon (BLE, macOS) ===")
     log(f"Poll interval: {POLL_INTERVAL}s")
@@ -1102,7 +1123,30 @@ async def hub_loop(hub: "Hub", stop_event: asyncio.Event) -> None:
             pass
 
 
+VIRTUAL_SOCKET: Path | None = None
+
+
+def parse_args(argv: list[str]) -> None:
+    """--virtual [path]  talk to the desktop simulator instead of BLE
+    --no-usage          skip the usage API poll
+    --hub-socket path   where knob_hook.py finds the hub (default ~/.config/ai-knob/bridge.sock)"""
+    global VIRTUAL_SOCKET, USAGE_POLL, HUB_SOCKET
+    import argparse
+    ap = argparse.ArgumentParser(description="AI Knob bridge")
+    ap.add_argument("--virtual", nargs="?", const=str(virtual_knob.DEFAULT_SOCKET), default=None)
+    ap.add_argument("--no-usage", action="store_true")
+    ap.add_argument("--hub-socket", default=None)
+    a = ap.parse_args(argv)
+    VIRTUAL_SOCKET = Path(a.virtual) if a.virtual else None
+    USAGE_POLL = not a.no_usage
+    HUB_SOCKET = Path(a.hub_socket) if a.hub_socket else None
+
+
+HUB_SOCKET: Path | None = None
+
+
 if __name__ == "__main__":
+    parse_args(sys.argv[1:])
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

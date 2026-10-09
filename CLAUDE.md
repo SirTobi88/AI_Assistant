@@ -36,3 +36,9 @@
   `41494b6e-6f62-4272-6964-6765000000xx`, Konfig/Adresse/Hook-Daten unter `~/.config/ai-knob/`,
   Status-Hook heißt `knob_activity.py` (deren Installer erkennt `clawd_activity.py` — gleicher Name
   würde die Hooks gegenseitig ersetzen). Knob-Prompts: Timeout 30 s, solange wartet der Dialog.
+- Virtueller Knob: `bridge/virtual_knob.py` (Unix-Socket `~/.config/ai-knob/knob.sock`, Pakete
+  Kanal R/T/Q + u16-Länge) liefert ein BleakClient-ähnliches `SocketClient`; dieselbe
+  `run_session()` treibt Hardware und Simulator. Sim: `SIM_BRIDGE=<socket>` ersetzt die Szenarien
+  (Empfang über die echte `rxq`, Senden gestückelt wie `ble.cpp`). Daemon-Optionen:
+  `--virtual [pfad]`, `--no-usage` (keine API-Abfrage, für Tests), `--hub-socket`.
+  Start: `tools/virtual_knob.sh`. E2E-Test: `bridge/tests/test_e2e_virtual.py` (braucht Sim-Build).

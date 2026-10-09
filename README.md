@@ -43,6 +43,19 @@ Service-UUID, Konfiguration und Hook-Daten unter `~/.config/ai-knob/`, Hook-Date
 Läuft die Bridge nicht oder ist der Knob nicht
 verbunden, zeigt Claude Code sofort den normalen Dialog.
 
+## Virtueller Knob (ohne Hardware)
+
+```bash
+tools/virtual_knob.sh              # Bridge im virtuellen Modus + Simulator-Fenster
+tools/virtual_knob.sh --no-usage   # ohne Usage-Abfrage
+```
+
+Der Simulator verbindet sich über `~/.config/ai-knob/knob.sock` statt Bluetooth mit der Bridge.
+Es sind dieselben Pakete wie über GATT, nur über einen anderen Transport. Mausrad oder Pfeil hoch/runter = Ring,
+Klick = Tap, gedrückt halten = Halten. Mit installiertem `knob_hook.py` landen Freigaben und
+Fragen echter Claude-Code-Sessions im Simulator. End-to-End-Test:
+`.venv/bin/python -m pytest bridge/tests/test_e2e_virtual.py`.
+
 ## Bedienung
 
 | Geste | Wirkung |
