@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from bridge import clawd_activity, knob_hook as kh, monitor, protocol, sessions
+from bridge import knob_activity, knob_hook as kh, monitor, protocol, sessions
 from bridge.hub import Hub
 
 BASH_PUSH = {"hook_event_name": "PermissionRequest", "session_id": "s1", "tool_name": "Bash",
@@ -204,7 +204,7 @@ def test_commands_resolve_short_session_ids():
 # ---- sessions from hook files + transcripts
 
 def _hook(tmp, **ev):
-    clawd_activity.handle_hook(json.dumps({"session_id": "abc", **ev}), now=1000.0, activity_dir=tmp)
+    knob_activity.handle_hook(json.dumps({"session_id": "abc", **ev}), now=1000.0, activity_dir=tmp)
 
 
 def test_sessions_from_hooks_and_transcript(tmp_path):
@@ -224,7 +224,7 @@ def test_sessions_from_hooks_and_transcript(tmp_path):
         ("abc", "AI_Assistant", protocol.NEEDS_PERMISSION, "opus", "plan", 62)
     assert sessions.context_tokens_k(act, "abc") == 124
     # an old permission prompt decays to idle
-    [s] = sessions.read_sessions(act, now=1000.0 + clawd_activity.ALLOW_STALE_S + 1)
+    [s] = sessions.read_sessions(act, now=1000.0 + knob_activity.ALLOW_STALE_S + 1)
     assert s.state == protocol.IDLE
 
 
@@ -244,3 +244,29 @@ def test_burn_rate_and_eta():
     assert b.eta_minutes(reset_minutes=60) == -1     # resets before it runs out
     b.add(2, now=1900)           # window reset clears history
     assert b.rate() == 0 and b.eta_minutes(100) == -1
+
+
+# ---- side by side with Clawdmeter / AI_Limitmeter
+
+CLAWDMETER_CMD = '"/Users/x/Clawdmeter/daemon/.venv/bin/python" "/Users/x/Clawdmeter/daemon/clawd_activity.py" --hook'
+
+
+def test_installers_leave_clawdmeter_hooks_alone(tmp_path):
+    p = tmp_path / "settings.json"
+    theirs = {ev: [{"matcher": "*", "hooks": [{"type": "command", "command": CLAWDMETER_CMD}]}]
+              for ev in ("PreToolUse", "PermissionRequest", "Stop")}
+    p.write_text(json.dumps({"hooks": theirs}))
+    knob_activity.set_installed(True, p)
+    kh.set_installed(True, p)
+    hooks = json.loads(p.read_text())["hooks"]
+    for ev in theirs:
+        cmds = [h["command"] for g in hooks[ev] for h in g["hooks"]]
+        assert CLAWDMETER_CMD in cmds
+    assert not knob_activity.is_installed(tmp_path / "missing.json")
+    knob_activity.set_installed(False, p)
+    kh.set_installed(False, p)
+    assert json.loads(p.read_text())["hooks"] == theirs
+
+
+def test_own_activity_dir():
+    assert knob_activity.ACTIVITY_DIR.parts[-2:] == ("ai-knob", "activity")

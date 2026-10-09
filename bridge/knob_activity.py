@@ -2,7 +2,7 @@
 
 Two halves, both stdlib-only:
 
-* ``python3 clawd_activity.py --hook`` is what Claude Code runs on each hook
+* ``python3 knob_activity.py --hook`` is what Claude Code runs on each hook
   event. It reads the event JSON from stdin and drops the essentials into one
   small file per session under ACTIVITY_DIR. It must be fast and must never
   fail a Claude Code session, so every error is swallowed and it always exits 0.
@@ -36,12 +36,14 @@ def _default_activity_dir() -> Path:
     # started from the logon autostart outside that container, would never see
     # the desktop app's sessions. The home directory is not redirected (the
     # daemon reads the token Claude Code writes to ~/.claude the same way).
-    return Path.home() / ".config" / "claude-usage-monitor" / "activity"
+    return Path.home() / ".config" / "ai-knob" / "activity"
 
 
 ACTIVITY_DIR = _default_activity_dir()
 CLAUDE_SETTINGS = Path.home() / ".claude" / "settings.json"
-HOOK_MARK = "clawd_activity.py"
+# Own file name and folder, so this never replaces (or gets replaced by) the
+# Clawdmeter / AI_Limitmeter hook, which is recognised by "clawd_activity.py".
+HOOK_MARK = "knob_activity.py"
 
 # Events the hook is registered for. Tool events get a "*" matcher; the rest
 # take none.
@@ -298,10 +300,10 @@ if __name__ == "__main__":
     if arg in ("--install", "--uninstall"):
         set_installed(arg == "--install")
         print(("Installed" if arg == "--install" else "Removed")
-              + f" Clawdmeter hooks in {CLAUDE_SETTINGS}")
+              + f" AI Knob activity hooks in {CLAUDE_SETTINGS}")
         sys.exit(0)
     if arg == "--status":
         print(current_anim())
         sys.exit(0)
-    print("usage: clawd_activity.py --install | --uninstall | --status | --hook")
+    print("usage: knob_activity.py --install | --uninstall | --status | --hook")
     sys.exit(2)

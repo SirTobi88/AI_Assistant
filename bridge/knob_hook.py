@@ -23,7 +23,7 @@ SOCKET_PATH = Path.home() / ".config" / "ai-knob" / "bridge.sock"
 CLAUDE_SETTINGS = Path.home() / ".claude" / "settings.json"
 HOOK_MARK = "knob_hook.py"
 
-ASK_TIMEOUT = 120          # seconds the knob gets to answer
+ASK_TIMEOUT = 30           # seconds the knob gets; the normal dialog waits that long
 HOOK_TIMEOUT = ASK_TIMEOUT + 30
 CONNECT_TIMEOUT = 0.5
 

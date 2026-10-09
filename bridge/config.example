@@ -1,7 +1,7 @@
 # Clawdmeter daemon config
 #
 # Copy this file to:
-#   macOS / Linux : ~/.config/claude-usage-monitor/config
+#   macOS / Linux : ~/.config/ai-knob/config
 #   Windows       : %LOCALAPPDATA%\Clawdmeter\config
 #
 # The daemon re-reads it on every poll, so edits take effect within ~60s — no restart needed.
@@ -57,8 +57,7 @@ chime = off
 # your permission, done, out of quota (macOS and Windows daemons). Needs the
 # Claude Code hooks — install-mac.sh / install-windows.ps1 offer them, or
 # install them yourself with:
-#   daemon/.venv/bin/python daemon/clawd_activity.py --install        (macOS)
-#   .venv\Scripts\python.exe daemon\clawd_activity.py --install       (Windows)
+#   .venv/bin/python bridge/knob_activity.py --install     (macOS)
 #   auto = mirror Claude Code's state once the hooks are installed (default)
 #   on   = always send the state (shows a sleeping Clawd without hooks)
 #   off  = the device picks its own animations by usage rate

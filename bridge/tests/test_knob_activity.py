@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from bridge import clawd_activity as ca
+from bridge import knob_activity as ca
 import bridge.claude_usage_daemon as mod
 
 
@@ -107,16 +107,16 @@ def test_install_preserves_foreign_hooks_and_uninstall_restores(tmp_path):
 def test_payload_fields_follow_config(tmp_path, monkeypatch):
     cfg = tmp_path / "config"
     monkeypatch.setattr(mod, "CONFIG_FILE", cfg)
-    monkeypatch.setattr(mod.clawd_activity, "current_anim",
+    monkeypatch.setattr(mod.knob_activity, "current_anim",
                         lambda limit_hit=False: "limit" if limit_hit else "done")
 
     # Default "auto": off until the hooks are installed, then on.
     cfg.write_text("clock = 24\n")
-    monkeypatch.setattr(mod.clawd_activity, "is_installed", lambda: False)
+    monkeypatch.setattr(mod.knob_activity, "is_installed", lambda: False)
     p = {"s": 10, "w": 5}
     assert mod.add_activity_fields(p) is None
     assert "a" not in p and "sm" not in p and "ua" not in p
-    monkeypatch.setattr(mod.clawd_activity, "is_installed", lambda: True)
+    monkeypatch.setattr(mod.knob_activity, "is_installed", lambda: True)
     p = {"s": 10, "w": 5}
     assert mod.add_activity_fields(p) == "done"
     assert p == {"s": 10, "w": 5, "a": "done", "sm": 2, "ua": True, "ss": True}
@@ -154,7 +154,7 @@ def test_mode_change_is_sent_between_polls(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "CONFIG_FILE", cfg)
     monkeypatch.setattr(mod, "POLL_INTERVAL", 3600)
     monkeypatch.setattr(mod, "ACTIVITY_TICK", 0.01)
-    monkeypatch.setattr(mod.clawd_activity, "current_anim", lambda limit_hit=False: "done")
+    monkeypatch.setattr(mod.knob_activity, "current_anim", lambda limit_hit=False: "done")
 
     polls = []
 
@@ -215,7 +215,7 @@ def test_no_data_beat_stops_activity_resends(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "POLL_INTERVAL", 0.03)
     monkeypatch.setattr(mod, "ACTIVITY_TICK", 0.01)
     anims = iter(["done"] + ["allow"] * 1000)
-    monkeypatch.setattr(mod.clawd_activity, "current_anim", lambda limit_hit=False: next(anims))
+    monkeypatch.setattr(mod.knob_activity, "current_anim", lambda limit_hit=False: next(anims))
     results = iter([({"s": 10, "w": 5, "ok": True}, False)] + [(None, True)] * 1000)
 
     async def fake_poll():

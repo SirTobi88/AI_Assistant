@@ -32,3 +32,7 @@
   reicht bei diesen Tools `allow` allein nicht). Kein Ergebnis → keine Ausgabe → normaler Dialog.
 - Session-IDs gehen auf 12 Zeichen gekürzt an den Knob (`protocol.short_sid`), der Hub löst sie
   per Präfix auf. Adapter für switch/set/interrupt ist noch `LoggingAdapter` (Phase 3/4).
+- Getrennt von Clawdmeter/AI_Limitmeter (die parallel laufen): Gerätename „AI Knob“, Service-UUID
+  `41494b6e-6f62-4272-6964-6765000000xx`, Konfig/Adresse/Hook-Daten unter `~/.config/ai-knob/`,
+  Status-Hook heißt `knob_activity.py` (deren Installer erkennt `clawd_activity.py` — gleicher Name
+  würde die Hooks gegenseitig ersetzen). Knob-Prompts: Timeout 30 s, solange wartet der Dialog.

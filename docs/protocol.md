@@ -1,7 +1,9 @@
 # Protokoll v1 — Knob ⇄ Bridge
 
-Transport: BLE GATT, Service `4c41555a-4465-7669-6365-000000000001` (unverändert aus
-AI_Limitmeter, damit bestehende Pairings und der Limit-Teil weiter funktionieren).
+Transport: BLE GATT, Service `41494b6e-6f62-4272-6964-676500000001`, Gerätename `AI Knob XXXX`.
+Bewusst anders als Clawdmeter/AI_Limitmeter (`4c41555a-…`, „Clawdmeter“), damit deren Daemon
+den Knob nicht findet und die Bridge den Clawdmeter nicht. Die Characteristics haben dieselbe
+Rolle wie dort (Endziffer 2–4).
 
 | Characteristic | Richtung | Inhalt |
 |---|---|---|

@@ -29,12 +29,18 @@ Simulator: Pfeil hoch/runter oder Mausrad = Drehring, Mausklick = Tap.
 
 ```bash
 .venv/bin/python -m bridge.claude_usage_daemon        # BLE, Limits, Hub-Socket
-.venv/bin/python bridge/clawd_activity.py --install   # Status-Hooks (Sessions, Buddy)
+.venv/bin/python bridge/knob_activity.py --install    # Status-Hooks (Sessions, Buddy)
 .venv/bin/python bridge/knob_hook.py --install        # Freigaben/Fragen/Pläne am Knob
 ```
 
 Die Hooks tragen sich in `~/.claude/settings.json` ein (fremde Einträge bleiben unberührt,
-`--uninstall` entfernt nur die eigenen). Läuft die Bridge nicht oder ist der Knob nicht
+`--uninstall` entfernt nur die eigenen).
+
+**Neben Clawdmeter / AI_Limitmeter:** Alles ist getrennt: Gerätename „AI Knob XXXX“, eigene
+Service-UUID, Konfiguration und Hook-Daten unter `~/.config/ai-knob/`, Hook-Dateien
+`knob_activity.py`/`knob_hook.py`. Beide Daemons und beide Hook-Sätze können parallel laufen.
+
+Läuft die Bridge nicht oder ist der Knob nicht
 verbunden, zeigt Claude Code sofort den normalen Dialog.
 
 ## Bedienung

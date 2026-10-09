@@ -2,7 +2,7 @@
 """Claude Usage Tracker Daemon (BLE) — macOS port of claude-usage-daemon.sh.
 
 Polls Claude API rate-limit headers and writes a JSON payload to the
-ESP32 "Clawdmeter" peripheral over a custom GATT service. Uses
+ESP32 "AI Knob" peripheral over a custom GATT service. Uses
 bleak (CoreBluetooth backend on macOS).
 """
 
@@ -25,11 +25,11 @@ from bleak import BleakClient
 from bleak.exc import BleakError
 
 try:
-    from . import clawd_activity, codex_limits, monitor, sessions
+    from . import knob_activity, codex_limits, monitor, sessions
     from .hub import Hub
     from .link import KnobLink
 except ImportError:  # run as a script, not as the daemon package
-    import clawd_activity
+    import knob_activity
     import codex_limits
     import monitor
     import sessions
@@ -43,10 +43,12 @@ _last_usage: dict = {}
 SESSIONS_TICK = 1
 MONITOR_TICK = 10
 
-DEVICE_NAME = "Clawdmeter"
-SERVICE_UUID = "4c41555a-4465-7669-6365-000000000001"
-RX_CHAR_UUID = "4c41555a-4465-7669-6365-000000000002"
-REQ_CHAR_UUID = "4c41555a-4465-7669-6365-000000000004"
+# Own name, UUIDs and config dir: a Clawdmeter / AI_Limitmeter daemon running
+# next to this one must not find the knob, and this one must not find it.
+DEVICE_NAME = "AI Knob"
+SERVICE_UUID = "41494b6e-6f62-4272-6964-676500000001"
+RX_CHAR_UUID = "41494b6e-6f62-4272-6964-676500000002"
+REQ_CHAR_UUID = "41494b6e-6f62-4272-6964-676500000004"
 
 POLL_INTERVAL = 60
 TICK = 5
@@ -58,8 +60,8 @@ CONNECT_TIMEOUT = 20.0
 # Linux: token lives in ~/.claude/.credentials.json.
 KEYCHAIN_SERVICE = "Claude Code-credentials"
 DEFAULT_CONFIG_DIR = Path.home() / ".claude"
-SAVED_ADDR_FILE = Path.home() / ".config" / "claude-usage-monitor" / "ble-address"
-CONFIG_FILE = Path.home() / ".config" / "claude-usage-monitor" / "config"
+SAVED_ADDR_FILE = Path.home() / ".config" / "ai-knob" / "ble-address"
+CONFIG_FILE = Path.home() / ".config" / "ai-knob" / "config"
 
 API_URL = "https://api.anthropic.com/v1/messages"
 API_HEADERS_TEMPLATE = {
@@ -259,7 +261,7 @@ async def _get_cb_manager():
 
 
 async def retrieve_connected_macos(skip_addr: str | None = None):
-    """Return a BLEDevice for a system-connected 'Clawdmeter', or None.
+    """Return a BLEDevice for a system-connected 'AI Knob', or None.
 
     Two-step lookup, strongest signal first:
 
@@ -302,7 +304,7 @@ async def retrieve_connected_macos(skip_addr: str | None = None):
             return _wrap(p)
 
     # 2. Generic HID service — require a name match. Prefix, not equality:
-    # boards append the last two bytes of their MAC ("Clawdmeter 35F9") so
+    # boards append the last two bytes of their MAC ("AI Knob 35F9") so
     # several of them in one room stay distinguishable.
     hid = cm.retrieveConnectedPeripheralsWithServices_(
         [CBUUID.UUIDWithString_("1812")]
@@ -387,7 +389,7 @@ def read_activity_settings() -> dict:
     (usage|clawd|auto), corner_buddy (on|off), state_sounds (off|on).
 
     activity defaults to "auto": on once the Claude Code hooks are installed
-    (clawd_activity.py --install, which install-mac.sh offers), off until
+    (knob_activity.py --install, which install-mac.sh offers), off until
     then — without hooks there is no state to show, and "on" would only ever
     report a sleeping Clawd.
     """
@@ -430,13 +432,13 @@ def add_activity_fields(payload: dict) -> str | None:
     name sent, or None when activity is off (fields omitted entirely)."""
     opts = read_activity_settings()
     active = opts["activity"] == "on" or (
-        opts["activity"] == "auto" and clawd_activity.is_installed())
+        opts["activity"] == "auto" and knob_activity.is_installed())
     if not active:
         for k in ("a", "sm", "ua", "ss"):
             payload.pop(k, None)
         return None
     limit_hit = int(payload.get("s", 0) or 0) >= 100 or int(payload.get("w", 0) or 0) >= 100
-    anim = clawd_activity.current_anim(limit_hit=limit_hit)
+    anim = knob_activity.current_anim(limit_hit=limit_hit)
     payload["a"] = anim
     payload["sm"] = _SCREEN_MODES[opts["screen_mode"]]
     payload["ua"] = opts["corner_buddy"] == "on"
@@ -1089,7 +1091,7 @@ async def hub_loop(hub: "Hub", stop_event: asyncio.Event) -> None:
                 reset = _last_usage.get("sr")
                 msg = await asyncio.to_thread(
                     monitor.monitor_msg, hub.active, BURN, int(reset) if reset is not None else None,
-                    sessions.context_tokens_k(clawd_activity.ACTIVITY_DIR, hub.active),
+                    sessions.context_tokens_k(knob_activity.ACTIVITY_DIR, hub.active),
                     active.cwd if active else "")
                 await hub.set_monitor(msg)
         except Exception as e:  # never let the side loop kill the daemon

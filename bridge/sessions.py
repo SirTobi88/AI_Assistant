@@ -1,6 +1,6 @@
 """Claude Code sessions for the knob's session ring.
 
-Built from the per-session files clawd_activity.py's hook writes (state, cwd,
+Built from the per-session files knob_activity.py's hook writes (state, cwd,
 transcript path, permission mode) plus the tail of each session's transcript
 (model, context fill). Read-only and cheap enough to run every second.
 """
@@ -12,16 +12,16 @@ import time
 from pathlib import Path
 
 try:
-    from . import clawd_activity, protocol
+    from . import knob_activity, protocol
 except ImportError:  # run as a script
-    import clawd_activity
+    import knob_activity
     import protocol
 
 TAIL_BYTES = 256 * 1024
 STALE_TO_IDLE = {  # protocol state -> seconds before it decays to idle
-    protocol.THINKING: clawd_activity.WORK_STALE_S, protocol.TOOL: clawd_activity.WORK_STALE_S,
-    protocol.COMPACTING: clawd_activity.WORK_STALE_S, protocol.DONE: clawd_activity.DONE_S,
-    protocol.NEEDS_PERMISSION: clawd_activity.ALLOW_STALE_S, protocol.ASKING: clawd_activity.ALLOW_STALE_S,
+    protocol.THINKING: knob_activity.WORK_STALE_S, protocol.TOOL: knob_activity.WORK_STALE_S,
+    protocol.COMPACTING: knob_activity.WORK_STALE_S, protocol.DONE: knob_activity.DONE_S,
+    protocol.NEEDS_PERMISSION: knob_activity.ALLOW_STALE_S, protocol.ASKING: knob_activity.ALLOW_STALE_S,
 }
 HIDE_AFTER_S = 12 * 3600
 
@@ -75,7 +75,7 @@ def transcript_info(path: str) -> dict:
     return info
 
 
-def read_sessions(activity_dir: Path = clawd_activity.ACTIVITY_DIR,
+def read_sessions(activity_dir: Path = knob_activity.ACTIVITY_DIR,
                   now: float | None = None) -> list[protocol.Session]:
     now = time.time() if now is None else now
     out: list[tuple[float, protocol.Session]] = []

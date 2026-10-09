@@ -5,21 +5,22 @@
 #include <Preferences.h>
 #include "rxq.h"
 
-// Advertised name. Every board used to announce itself as plain "Clawdmeter",
+// Advertised name ("AI Knob XXXX" here, distinct from the Clawdmeter boards
+// this firmware descends from). Every board used to announce itself as plain "Clawdmeter",
 // so a daemon bonded to one would find another and connect to it — seen on
 // hardware, where the daemon repeatedly grabbed a second board and dropped it
 // again. The last two bytes of the BLE MAC are appended at init to tell them
 // apart: "Clawdmeter 35F9". Keep the suffix short — the primary advertising
 // packet holds flags (3) + appearance (4) + HID UUID (4) + name (2 + length),
 // and 31 bytes is the ceiling; this lands at 28.
-#define DEVICE_NAME "Clawdmeter"
+#define DEVICE_NAME "AI Knob"
 #define DEVICE_NAME_MAX 24
 
 // Custom GATT UUIDs for data channel
-#define SERVICE_UUID        "4c41555a-4465-7669-6365-000000000001"
-#define RX_CHAR_UUID        "4c41555a-4465-7669-6365-000000000002"  // host writes here
-#define TX_CHAR_UUID        "4c41555a-4465-7669-6365-000000000003"  // device ack/nack notifies
-#define REQ_CHAR_UUID       "4c41555a-4465-7669-6365-000000000004"  // device-initiated refresh request
+#define SERVICE_UUID        "41494b6e-6f62-4272-6964-676500000001"
+#define RX_CHAR_UUID        "41494b6e-6f62-4272-6964-676500000002"  // host writes here
+#define TX_CHAR_UUID        "41494b6e-6f62-4272-6964-676500000003"  // device ack/nack notifies
+#define REQ_CHAR_UUID       "41494b6e-6f62-4272-6964-676500000004"  // device-initiated refresh request
 
 // Notify payload per TX packet. macOS settles on an ATT MTU of 185, so 180
 // leaves room; longer commands go out 0x01-framed like host messages.
