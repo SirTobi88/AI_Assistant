@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import socket
 import sys
 from pathlib import Path
@@ -23,18 +22,17 @@ SOCKET_PATH = Path.home() / ".config" / "ai-knob" / "bridge.sock"
 CLAUDE_SETTINGS = Path.home() / ".claude" / "settings.json"
 HOOK_MARK = "knob_hook.py"
 
-ASK_TIMEOUT = 30           # seconds the knob gets; the normal dialog waits that long
+try:
+    from .prompts import (ALLOW, ALLOW_ALWAYS, ASK_TIMEOUT, AT_COMPUTER, DANGEROUS, DENY,  # noqa: F401
+                          PLAN_DENY_MESSAGE, PLAN_NO, PLAN_OK, is_dangerous, tool_summary)
+    from . import prompts
+except ImportError:  # run as a script by Claude Code
+    from prompts import (ALLOW, ALLOW_ALWAYS, ASK_TIMEOUT, AT_COMPUTER, DANGEROUS, DENY,  # noqa: F401
+                         PLAN_DENY_MESSAGE, PLAN_NO, PLAN_OK, is_dangerous, tool_summary)
+    import prompts
+
 HOOK_TIMEOUT = ASK_TIMEOUT + 30
 CONNECT_TIMEOUT = 0.5
-
-ALLOW, ALLOW_ALWAYS, DENY, AT_COMPUTER = "Erlauben", "Immer erlauben", "Ablehnen", "Am Rechner"
-
-# Commands that only go through with a hold on the knob (hardware confirm).
-DANGEROUS = re.compile(
-    r"\brm\s+-[a-zA-Z]*[rf]|\bgit\s+push\b|\bgit\s+reset\s+--hard|\bgit\s+clean\s+-[a-z]*f|"
-    r"\bsudo\b|\bdeploy\b|\bdrop\s+(table|database)\b|\bmkfs\b|\bdd\s+if=|\bchmod\s+-R\b|"
-    r"\bterraform\s+(apply|destroy)\b|\bkubectl\s+delete\b",
-    re.IGNORECASE)
 
 
 # ---------------------------------------------------------------- bridge client
@@ -64,73 +62,26 @@ def ask_bridge(request: dict, socket_path: Path = SOCKET_PATH) -> list[int] | No
 
 
 # ---------------------------------------------------------------- formatting
+# The asking itself lives in prompts.py; here only the settings-hook wrapping.
 
-def tool_summary(tool: str, inp: dict) -> str:
-    if not isinstance(inp, dict):
-        return ""
-    if tool == "Bash":
-        return str(inp.get("command", ""))
-    for key in ("file_path", "notebook_path", "url", "pattern", "path", "query"):
-        if inp.get(key):
-            return str(inp[key])
-    return json.dumps(inp, ensure_ascii=False)[:300]
+def _sid(event: dict) -> str:
+    return str(event.get("session_id") or "")
 
-
-def is_dangerous(tool: str, inp: dict) -> bool:
-    return tool == "Bash" and bool(DANGEROUS.search(tool_summary(tool, inp)))
-
-
-def _base(event: dict) -> dict:
-    return {"sid": str(event.get("session_id") or ""), "timeout": ASK_TIMEOUT}
-
-
-# ---- PermissionRequest
 
 def permission_request(event: dict) -> tuple[dict, list[str]]:
-    tool = str(event.get("tool_name") or "Tool")
-    inp = event.get("tool_input") or {}
-    options = [ALLOW]
-    if event.get("permission_suggestions"):
-        options.append(ALLOW_ALWAYS)
-    options += [DENY, AT_COMPUTER]
-    confirm = [i for i, o in enumerate(options) if o in (ALLOW, ALLOW_ALWAYS)] \
-        if is_dangerous(tool, inp) else []
-    req = {**_base(event), "kind": "perm", "title": tool, "text": tool_summary(tool, inp),
-           "options": options, "confirm": confirm}
-    return req, options
+    return prompts.permission_request(event.get("tool_name"), event.get("tool_input") or {},
+                                      event.get("permission_suggestions"), _sid(event))
 
 
 def permission_output(event: dict, options: list[str], choices: list[int] | None) -> dict | None:
-    if not choices or choices[0] >= len(options):
+    decision = prompts.permission_decision(options, choices, event.get("permission_suggestions"))
+    if decision is None:
         return None
-    pick = options[choices[0]]
-    if pick == AT_COMPUTER:
-        return None
-    if pick == DENY:
-        decision = {"behavior": "deny", "message": "Am Knob abgelehnt."}
-    else:
-        decision = {"behavior": "allow"}
-        if pick == ALLOW_ALWAYS:
-            decision["updatedPermissions"] = event.get("permission_suggestions") or []
     return {"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": decision}}
 
 
-# ---- AskUserQuestion (PreToolUse)
-
 def question_requests(event: dict) -> list[tuple[dict, dict, list[str]]]:
-    """One knob prompt per question: (request, question, option labels)."""
-    out = []
-    questions = (event.get("tool_input") or {}).get("questions") or []
-    for n, q in enumerate(questions):
-        labels = [str(o.get("label", "")) for o in q.get("options") or [] if isinstance(o, dict)][:7]
-        options = labels + [AT_COMPUTER]
-        title = str(q.get("header") or "Frage")
-        if len(questions) > 1:
-            title = f"{title} ({n + 1}/{len(questions)})"
-        req = {**_base(event), "kind": "ask", "title": title, "text": str(q.get("question", "")),
-               "options": options, "multi": bool(q.get("multiSelect")), "confirm": []}
-        out.append((req, q, options))
-    return out
+    return prompts.question_requests((event.get("tool_input") or {}).get("questions"), _sid(event))
 
 
 def question_output(event: dict, answers: dict) -> dict:
@@ -140,30 +91,18 @@ def question_output(event: dict, answers: dict) -> dict:
                                    "permissionDecision": "allow", "updatedInput": inp}}
 
 
-# ---- ExitPlanMode (PreToolUse)
-
-PLAN_OK, PLAN_NO = "Annehmen", "Ablehnen"
-
-
 def plan_request(event: dict) -> tuple[dict, list[str]]:
-    plan = str((event.get("tool_input") or {}).get("plan") or "")
-    first = next((ln.lstrip("# ").strip() for ln in plan.splitlines() if ln.strip()), "Plan")
-    options = [PLAN_OK, PLAN_NO, AT_COMPUTER]
-    req = {**_base(event), "kind": "plan", "title": first[:40], "text": plan,
-           "options": options, "confirm": []}
-    return req, options
+    return prompts.plan_request((event.get("tool_input") or {}).get("plan"), _sid(event))
 
 
 def plan_output(event: dict, options: list[str], choices: list[int] | None) -> dict | None:
-    if not choices or choices[0] >= len(options):
-        return None
-    pick = options[choices[0]]
-    if pick == PLAN_OK:
+    verdict = prompts.plan_verdict(options, choices)
+    if verdict is True:
         return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow",
                                        "updatedInput": dict(event.get("tool_input") or {})}}
-    if pick == PLAN_NO:
+    if verdict is False:
         return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-                                       "permissionDecisionReason": "Plan am Knob abgelehnt."}}
+                                       "permissionDecisionReason": PLAN_DENY_MESSAGE}}
     return None
 
 
@@ -185,10 +124,10 @@ def run_pre(event: dict, ask=ask_bridge) -> dict | None:
         return None
     answers = {}
     for req, q, options in question_requests(event):
-        choices = ask(req)
-        if not choices or any(c >= len(options) or options[c] == AT_COMPUTER for c in choices):
+        answer = prompts.question_answer(options, ask(req))
+        if answer is None:
             return None      # any question not answered on the knob -> normal dialog
-        answers[str(q.get("question", ""))] = ", ".join(options[c] for c in choices)
+        answers[str(q.get("question", ""))] = answer
     return question_output(event, answers) if answers else None
 
 

@@ -25,13 +25,14 @@ from bleak import BleakClient
 from bleak.exc import BleakError
 
 try:
-    from . import knob_activity, codex_limits, control, monitor, sessions, virtual_knob
+    from . import knob_activity, codex_limits, control, mod_server, monitor, sessions, virtual_knob
     from .hub import Hub
     from .link import KnobLink
 except ImportError:  # run as a script, not as the daemon package
     import knob_activity
     import codex_limits
     import control
+    import mod_server
     import monitor
     import sessions
     import virtual_knob
@@ -40,6 +41,8 @@ except ImportError:  # run as a script, not as the daemon package
 
 # The knob side (protocol v1): set up in main(), shared by every connection.
 HUB: "Hub | None" = None
+MODS = mod_server.ModRegistry(log=lambda m: log(m))
+MOD_USAGE_TICK = 30       # resend limits from the mods this often
 BURN = monitor.BurnTracker()
 _last_usage: dict = {}
 SESSIONS_TICK = 1
@@ -934,7 +937,25 @@ async def run_session(client, stop_event: asyncio.Event) -> bool:
         while client.is_connected and not stop_event.is_set():
             now = time.time()
             elapsed = now - last_poll
-            if not USAGE_POLL:
+            # Sessions running the ai-knob mod report the account's limits
+            # themselves ($.session.usage()); while one does, no API poll.
+            rate = MODS.rate_limits()
+            mod_payload = mod_server.usage_payload(rate) if rate else None
+            if mod_payload is not None:
+                if session.refresh_requested.is_set() or elapsed >= MOD_USAGE_TICK:
+                    session.refresh_requested.clear()
+                    add_chime_field(mod_payload)
+                    add_clock_fields(mod_payload)
+                    last_anim = add_activity_fields(mod_payload)
+                    last_key = _activity_key(mod_payload)
+                    add_codex_fields(mod_payload)
+                    last_codex_check = now
+                    if await session.write_payload(mod_payload):
+                        last_poll = last_anim_sent = time.time()
+                        last_payload = mod_payload
+                        last_nodata = None
+                        used_successfully = True
+            elif not USAGE_POLL:
                 session.refresh_requested.clear()
             elif session.refresh_requested.is_set() or elapsed >= POLL_INTERVAL:
                 session.refresh_requested.clear()
@@ -1048,15 +1069,18 @@ async def main() -> None:
             signal.signal(sig, _stop)
 
     global HUB
-    HUB = Hub(adapter=control.adapter_from_config(log), log=log,
+    HUB = Hub(adapter=control.adapter_from_config(log, registry=MODS), log=log,
               **({"socket_path": HUB_SOCKET} if HUB_SOCKET else {}))
     await HUB.start()
+    mods = mod_server.ModServer(HUB, MODS, MOD_SOCKET or mod_server.DEFAULT_SOCKET, log)
+    await mods.start()
     hub_task = asyncio.create_task(hub_loop(HUB, stop_event))
 
     if VIRTUAL_SOCKET is not None:
         log(f"=== AI Knob bridge, virtual knob on {VIRTUAL_SOCKET} ===")
         await virtual_knob.serve(VIRTUAL_SOCKET, run_session, stop_event, log)
         hub_task.cancel()
+        await mods.stop()
         await HUB.stop()
         return
 
@@ -1098,7 +1122,22 @@ async def main() -> None:
             backoff = 1
 
     hub_task.cancel()
+    await mods.stop()
     await HUB.stop()
+
+
+def current_sessions() -> list:
+    """Sessions running the mod first; hook-file sessions only where no mod reports."""
+    from_mods = MODS.views()
+    known = {s.sid for s in from_mods}
+    return from_mods + [s for s in sessions.read_sessions() if s.sid not in known]
+
+
+def context_tokens_k(sid: str) -> int:
+    if MODS.has(sid):
+        t = MODS.sessions[sid].tokens
+        return round(t / 1000) if t and t > 0 else -1
+    return sessions.context_tokens_k(knob_activity.ACTIVITY_DIR, sid)
 
 
 async def hub_loop(hub: "Hub", stop_event: asyncio.Event) -> None:
@@ -1106,7 +1145,7 @@ async def hub_loop(hub: "Hub", stop_event: asyncio.Event) -> None:
     last_monitor = 0.0
     while not stop_event.is_set():
         try:
-            await hub.set_sessions(sessions.read_sessions())
+            await hub.set_sessions(current_sessions())
             now = time.time()
             if hub.connected and hub.active and now - last_monitor >= MONITOR_TICK:
                 last_monitor = now
@@ -1114,7 +1153,7 @@ async def hub_loop(hub: "Hub", stop_event: asyncio.Event) -> None:
                 reset = _last_usage.get("sr")
                 msg = await asyncio.to_thread(
                     monitor.monitor_msg, hub.active, BURN, int(reset) if reset is not None else None,
-                    sessions.context_tokens_k(knob_activity.ACTIVITY_DIR, hub.active),
+                    context_tokens_k(hub.active),
                     active.cwd if active else "")
                 await hub.set_monitor(msg)
         except Exception as e:  # never let the side loop kill the daemon
@@ -1131,20 +1170,24 @@ VIRTUAL_SOCKET: Path | None = None
 def parse_args(argv: list[str]) -> None:
     """--virtual [path]  talk to the desktop simulator instead of BLE
     --no-usage          skip the usage API poll
-    --hub-socket path   where knob_hook.py finds the hub (default ~/.config/ai-knob/bridge.sock)"""
-    global VIRTUAL_SOCKET, USAGE_POLL, HUB_SOCKET
+    --hub-socket path   where knob_hook.py finds the hub (default ~/.config/ai-knob/bridge.sock)
+    --mod-socket path   where the ai-knob mod finds the bridge (default ~/.config/ai-knob/mod.sock)"""
+    global VIRTUAL_SOCKET, USAGE_POLL, HUB_SOCKET, MOD_SOCKET
     import argparse
     ap = argparse.ArgumentParser(description="AI Knob bridge")
     ap.add_argument("--virtual", nargs="?", const=str(virtual_knob.DEFAULT_SOCKET), default=None)
     ap.add_argument("--no-usage", action="store_true")
     ap.add_argument("--hub-socket", default=None)
+    ap.add_argument("--mod-socket", default=None)
     a = ap.parse_args(argv)
     VIRTUAL_SOCKET = Path(a.virtual) if a.virtual else None
     USAGE_POLL = not a.no_usage
     HUB_SOCKET = Path(a.hub_socket) if a.hub_socket else None
+    MOD_SOCKET = Path(a.mod_socket) if a.mod_socket else None
 
 
 HUB_SOCKET: Path | None = None
+MOD_SOCKET: Path | None = None
 
 
 if __name__ == "__main__":

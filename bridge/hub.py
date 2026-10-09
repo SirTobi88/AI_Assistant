@@ -197,6 +197,20 @@ class Hub:
             return
         self.log(f"Knob command {cmd.t} {a} (not handled yet)")
 
+    async def ask_request(self, req: dict) -> list[int] | None:
+        """A prompt as knob_hook.py / the mod endpoint describe it -> the knob's choices."""
+        prompt = protocol.Prompt(
+            id=f"p{next(self._ids)}", sid=str(req.get("sid", "")),
+            kind=str(req.get("kind", "ask")), title=str(req.get("title", "")),
+            text=str(req.get("text", "")), options=[str(o) for o in req.get("options", [])],
+            multi=bool(req.get("multi")), confirm=tuple(int(i) for i in req.get("confirm", [])),
+            timeout=int(req.get("timeout", 30)))
+        t0 = time.monotonic()
+        choices = await self.ask(prompt)
+        self.log(f"Prompt {prompt.id} ({prompt.kind} {prompt.title}): "
+                 f"{choices} after {time.monotonic() - t0:.1f}s")
+        return choices
+
     # ---- Unix socket for knob_hook.py
 
     async def _serve(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
@@ -205,16 +219,7 @@ class Hub:
             line = await asyncio.wait_for(reader.readline(), timeout=5)
             req = json.loads(line.decode() or "{}")
             if req.get("op") == "ask":
-                prompt = protocol.Prompt(
-                    id=f"p{next(self._ids)}", sid=str(req.get("sid", "")),
-                    kind=str(req.get("kind", "ask")), title=str(req.get("title", "")),
-                    text=str(req.get("text", "")), options=[str(o) for o in req.get("options", [])],
-                    multi=bool(req.get("multi")), confirm=tuple(int(i) for i in req.get("confirm", [])),
-                    timeout=int(req.get("timeout", 120)))
-                t0 = time.monotonic()
-                reply["choices"] = await self.ask(prompt)
-                self.log(f"Prompt {prompt.id} ({prompt.kind} {prompt.title}): "
-                         f"{reply['choices']} after {time.monotonic() - t0:.1f}s")
+                reply["choices"] = await self.ask_request(req)
         except (ValueError, asyncio.TimeoutError, ConnectionError) as e:
             self.log(f"Hub request failed: {e!r}")
         try:

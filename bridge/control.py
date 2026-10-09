@@ -274,10 +274,49 @@ class KeystrokeAdapter:
             return False
 
 
-def adapter_from_config(log=print):
+class ModAdapter:
+    """Sessions running the ai-knob mod carry commands out themselves
+    (mod_server.ModRegistry queues them); everything the mod can't do — the
+    permission mode, sessions without the mod — goes to ``fallback`` (the
+    keystroke adapter when enabled), else it is reported as not possible."""
+
+    def __init__(self, registry, fallback=None, log=print) -> None:
+        self.registry, self.fallback, self.log = registry, fallback, log
+
+    def _fallback(self, what: str, session, *args) -> bool:
+        if self.fallback is None:
+            self.log(f"control: {what} for {session.label} not possible "
+                     "(no mod for it; keystrokes off)")
+            return False
+        return getattr(self.fallback, what)(session, *args)
+
+    def switch(self, session) -> bool:
+        # Picking the knob's active session needs nothing from the session itself.
+        return True if self.registry.has(session.sid) else self._fallback("switch", session)
+
+    def set(self, session, key: str, value) -> bool:
+        if not self.registry.has(session.sid) or key == "mode":
+            return self._fallback("set", session, key, value)
+        if key == "model" and not valid_model(str(value)) or key == "effort" and value not in EFFORTS:
+            self.log(f"control: {key}={value!r} not allowed")
+            return False
+        return self.registry.queue(session.sid, {"t": "set", "key": key,
+                                                 "value": bool(value) if key == "fast" else value})
+
+    def interrupt(self, session) -> bool:
+        if not self.registry.has(session.sid):
+            return self._fallback("interrupt", session)
+        return self.registry.queue(session.sid, {"t": "interrupt"})
+
+
+def adapter_from_config(log=print, registry=None):
     cfg = read_config()
+    keys = None
     if cfg.get("control", "off").lower() == "keys":
-        log("Knob control: keystrokes (Terminal.app / desktop app)")
-        return KeystrokeAdapter(log, cfg=cfg)
-    log("Knob control off (set control = keys in ~/.config/ai-knob/config to enable)")
-    return None
+        log("Knob control fallback: keystrokes (Terminal.app / desktop app)")
+        keys = KeystrokeAdapter(log, cfg=cfg)
+    if registry is not None:
+        return ModAdapter(registry, keys, log)
+    if keys is None:
+        log("Knob control off (set control = keys in ~/.config/ai-knob/config to enable)")
+    return keys
