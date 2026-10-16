@@ -151,3 +151,11 @@ def test_menu_command_parses():
     cmd = protocol.parse_command({"t": "menu", "sid": "abc", "k": "mode", "open": 1})
     assert cmd.t == "menu" and cmd.args == {"sid": "abc", "key": "mode", "open": True}
     assert protocol.parse_command({"t": "menu", "sid": "abc", "k": "model", "open": 1}) is None
+
+
+def test_desktop_model_menu_follows_the_app_order():
+    keys = c.plan_set(DESK, "model", "sonnet", {}).keys
+    assert keys[0] == ("char", "i", ("command", "shift")) and keys[-1] == ("code", 19, ())
+    assert c.plan_set(DESK, "model", "haiku", {}).keys[-1] == ("code", 21, ())
+    # desktop keys go through the global key stream, never to the process
+    assert "tell process" not in c.applescript(c.plan_set(DESK, "model", "opus", {}))

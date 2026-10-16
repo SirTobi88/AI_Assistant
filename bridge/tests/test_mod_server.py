@@ -267,3 +267,20 @@ def test_mode_set_by_keystroke_survives_the_mods_heartbeat():
     reg.set_mode("d", "plan")
     reg.report({"sid": "d", "mode": "acceptEdits", "prompted": True})   # set back in the app, then typed
     assert reg.sessions["d"].mode == "acceptEdits"
+
+
+def test_desktop_model_goes_to_the_app_menu_when_keys_are_on():
+    calls = []
+
+    class Keys:
+        def set(self, s, k, v): calls.append((k, v)); return True
+
+    reg = ms.ModRegistry(log=lambda m: None)
+    reg.hello({"sid": "d", "entrypoint": "claude-desktop"})
+    reg.hello({"sid": "t", "entrypoint": "cli"})
+    a = control.ModAdapter(reg, Keys(), log=lambda m: None)
+    assert a.set(protocol.Session("d", "x"), "model", "sonnet") and calls == [("model", "sonnet")]
+    # CLI sessions and keys off: /model in the mod as before
+    assert a.set(protocol.Session("t", "y"), "model", "sonnet") and reg.sessions["t"].commands[-1]["key"] == "model"
+    assert control.ModAdapter(reg, None, log=lambda m: None).set(protocol.Session("d", "x"), "model", "opus")
+    assert reg.sessions["d"].commands[-1] == {"t": "set", "key": "model", "value": "opus"}

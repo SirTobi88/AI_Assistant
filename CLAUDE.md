@@ -60,3 +60,7 @@
   ein getipptes Zeichen wirkt im Menü nicht), zurück → Esc. Reihenfolge laut App: Auto, Manual,
   Accept edits, Plan. `bypassPermissions` setzt der Knob nie. Der Knob folgt der Session mit dem
   letzten Prompt (Mod meldet `prompted`/`prompted_at`).
+- Modell vom Knob (Desktop, `control = keys`): Menü der App Cmd+Shift+I + Ziffer (Opus, Sonnet,
+  Fable, Haiku), damit auch die Auswahl unter dem Eingabefeld wechselt; `/model` aus dem Mod ändert
+  nur die Engine. CLI und Tastenkürzel aus: weiter `/model` im Mod. Tasten an die Desktop-App gehen
+  immer über den globalen Tastenstrom (nicht `tell process`).

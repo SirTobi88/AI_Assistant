@@ -38,7 +38,8 @@ CLI_MODE_CYCLE = ("default", "acceptEdits", "plan", "auto")
 # Desktop menus: item order -> digit. Defaults from the docs' order; check them
 # in the app and override in the config (desktop_models / desktop_efforts /
 # desktop_modes = comma-separated, in menu order).
-DESKTOP_MODELS = ("default", "fable", "opus", "sonnet", "haiku")
+# Checked in the app (2026-10-16): Opus, Sonnet, Fable, Haiku.
+DESKTOP_MODELS = ("opus", "sonnet", "fable", "haiku")
 DESKTOP_EFFORTS = EFFORTS
 # Checked in the app (2026-10-16): Auto, Manual, Accept edits, Plan; bypass
 # permissions is a separate switch, not an item.
@@ -215,12 +216,12 @@ def applescript(plan: Plan) -> str:
     else:
         raise Unsupported("no focus target")
     if plan.keys:
-        if plan.activate:
-            lines += ["delay 0.25", f'tell application "System Events" to tell process {_q(proc)}']
+        if proc == "Claude":
+            # The app's menus track the global key stream only: keys sent to
+            # the process (tell process) never reach an open menu.
+            lines += ["delay 0.25" if plan.activate else "delay 0.1", 'tell application "System Events"']
         else:
-            # An open app menu tracks the global key stream only: keys sent
-            # to the process (tell process) never reach it.
-            lines += ["delay 0.1", 'tell application "System Events"']
+            lines += ["delay 0.25", f'tell application "System Events" to tell process {_q(proc)}']
         for k in plan.keys:
             if k[0] == "text":
                 lines.append(f"  keystroke {_q(k[1])}")
@@ -352,8 +353,15 @@ class ModAdapter:
     def set(self, session, key: str, value) -> bool:
         if not self.registry.has(session.sid):
             return self._fallback("set", session, key, value)
+        desktop = self.registry.sessions[session.sid].entrypoint == "claude-desktop"
+        if key == "model" and desktop and self.fallback is not None:
+            # The app's model menu: /model from the mod changes the engine
+            # but not the picker under the input field.
+            if not valid_model(str(value)):
+                self.log(f"control: model={value!r} not allowed")
+                return False
+            return self._fallback("set", session, key, value)
         if key == "mode":
-            desktop = self.registry.sessions[session.sid].entrypoint == "claude-desktop"
             # Keystrokes when enabled: the app's own tool refuses a call from
             # the mod in auto mode (docs/mod-api-findings.md).
             if self.fallback is not None or not desktop:
