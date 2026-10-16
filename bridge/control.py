@@ -133,6 +133,9 @@ def plan_set(target: Target, key: str, value, current: dict, cfg: dict | None = 
         if key == "effort":
             return Plan(focus, _menu("e", _order(cfg, "desktop_efforts", DESKTOP_EFFORTS), str(value)))
         if key == "mode":
+            # Never from the knob: it would stop every permission question.
+            if value == "bypassPermissions":
+                raise Unsupported("bypassPermissions is not set from the knob")
             return Plan(focus, _menu("m", _order(cfg, "desktop_modes", DESKTOP_MODES), str(value)))
         if key == "fast":
             raise Unsupported("the desktop app has no shortcut for fast mode")
@@ -306,7 +309,9 @@ class ModAdapter:
         if not self.registry.has(session.sid):
             return self._fallback("set", session, key, value)
         if key == "mode":
-            if self.registry.sessions[session.sid].entrypoint != "claude-desktop":
+            # Keystrokes when enabled: the app's own tool refuses a call from
+            # the mod in auto mode (docs/mod-api-findings.md).
+            if self.fallback is not None or self.registry.sessions[session.sid].entrypoint != "claude-desktop":
                 return self._fallback("set", session, key, value)
             if value not in MOD_MODES:
                 self.log(f"control: mode={value!r} not allowed")

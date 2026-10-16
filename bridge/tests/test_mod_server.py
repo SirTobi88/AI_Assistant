@@ -184,11 +184,13 @@ def test_desktop_mode_goes_to_the_mod():
 
     reg = ms.ModRegistry(log=lambda m: None)
     reg.hello({"sid": "d", "entrypoint": "claude-desktop"})
-    a = control.ModAdapter(reg, Keys(), log=lambda m: None)
+    a = control.ModAdapter(reg, None, log=lambda m: None)
     assert a.set(protocol.Session("d", "x"), "mode", "plan")
     assert reg.sessions["d"].commands[-1] == {"t": "set", "key": "mode", "value": "plan"}
     assert not a.set(protocol.Session("d", "x"), "mode", "bypassPermissions")
-    assert calls == []
+    # with keystrokes enabled they win: the app refuses the mod's call in auto mode
+    assert control.ModAdapter(reg, Keys(), log=lambda m: None).set(protocol.Session("d", "x"), "mode", "auto")
+    assert calls == [("d", "mode", "auto")]
 
 
 def test_stale_sessions_are_dropped():

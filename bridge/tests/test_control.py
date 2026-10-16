@@ -106,3 +106,8 @@ def test_control_is_off_unless_configured(tmp_path, monkeypatch):
     assert c.adapter_from_config(lambda m: None) is None
     (tmp_path / "config").write_text("control = keys\n")
     assert isinstance(c.adapter_from_config(lambda m: None), c.KeystrokeAdapter)
+
+
+def test_desktop_never_selects_bypass_permissions():
+    with pytest.raises(c.Unsupported):
+        c.plan_set(DESK, "mode", "bypassPermissions", {})
