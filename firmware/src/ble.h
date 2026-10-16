@@ -28,6 +28,9 @@ const char* ble_get_data(void);
 void ble_send_ack(void);
 void ble_send_nack(void);
 void ble_request_refresh(void);
+// True once after the host subscribed to TX notifications: only then does a
+// command (the hello) reach it.
+bool ble_take_tx_subscribed(void);
 
 // Device -> host command (docs/protocol.md), notified on the TX characteristic.
 // Framed automatically when longer than one packet. No-op while disconnected.

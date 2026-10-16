@@ -228,6 +228,8 @@ void ble_send_nack(void) {
     if (bridge_path) { bridge_notify_str("{\"err\":true}"); printf("[sim] NACK\n"); return; }
     printf("[sim] payload NACKed — check the scenario JSON\n");
 }
+bool ble_take_tx_subscribed(void) { return false; }
+
 void ble_request_refresh(void) {
     const uint8_t req = 0x01;
     if (bridge_path) bridge_packet('Q', &req, 1);

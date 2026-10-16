@@ -334,6 +334,22 @@ class ReqCallbacks : public NimBLECharacteristicCallbacks {
     }
 };
 
+// The hello sent on connect is lost while the host has not yet enabled TX
+// notifications, so the main loop sends it once this flag is set.
+static volatile bool tx_subscribed = false;
+
+class TxCallbacks : public NimBLECharacteristicCallbacks {
+    void onSubscribe(NimBLECharacteristic* chr, NimBLEConnInfo& info, uint16_t subValue) override {
+        if (subValue != 0) tx_subscribed = true;
+    }
+};
+
+bool ble_take_tx_subscribed(void) {
+    if (!tx_subscribed) return false;
+    tx_subscribed = false;
+    return true;
+}
+
 void ble_init(void) {
     NimBLEDevice::init(DEVICE_NAME);
     NimBLEDevice::setSecurityAuth(true, false, true);  // bonding, no MITM, SC
@@ -393,6 +409,8 @@ void ble_init(void) {
         TX_CHAR_UUID,
         NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY
     );
+    static TxCallbacks txCb;
+    tx_char->setCallbacks(&txCb);
 
     req_char = svc->createCharacteristic(
         REQ_CHAR_UUID,

@@ -583,6 +583,7 @@ void loop() {
         ui_update_ble_status(bs, ble_get_device_name(), ble_get_mac_address());
         app_set_connected(bs == BLE_STATE_CONNECTED);
     }
+    if (ble_take_tx_subscribed()) proto_send_hello("0.1.0");
 
     // Polled rather than event-driven: this goes true on a failed handshake but
     // false again by simply timing out, which no BLE event announces. The UI
