@@ -210,8 +210,20 @@ def test_usage_payload_from_rate_limits():
     assert ms.usage_payload([{"kind": "five_hour", "percentUsed": 100, "resetsAt": "x"}], now)["st"] == "limited"
 
 
-def test_freshest_rate_limits_win():
+def test_rate_limits_merge_to_the_current_window():
     reg = ms.ModRegistry(log=lambda m: None)
-    reg.report({"sid": "a", "rate_limits": [{"kind": "five_hour", "percentUsed": 1}]})
-    reg.report({"sid": "b", "rate_limits": [{"kind": "five_hour", "percentUsed": 2}]})
-    assert reg.rate_limits()[0]["percentUsed"] == 2
+    now = 1_800_000_000
+    soon, later = "2027-01-15T08:30:00Z", "2027-01-15T09:30:00Z"
+    reg.report({"sid": "a", "rate_limits": [{"kind": "five_hour", "percentUsed": 60, "resetsAt": soon}]})
+    reg.report({"sid": "b", "rate_limits": [{"kind": "five_hour", "percentUsed": 67, "resetsAt": soon},
+                                            {"kind": "seven_day", "percentUsed": 71, "resetsAt": later}]})
+    # a fresh session without a request yet, and one with an expired window
+    reg.report({"sid": "c", "rate_limits": [{"kind": "five_hour", "percentUsed": 0, "resetsAt": None}]})
+    reg.report({"sid": "d", "rate_limits": [{"kind": "five_hour", "percentUsed": 3, "resetsAt": "2020-01-01T00:00:00Z"}]})
+    for s in reg.sessions.values():
+        s.rate_ts = now
+    got = {r["kind"]: r["percentUsed"] for r in reg.rate_limits(now=now)}
+    assert got == {"five_hour": 67, "seven_day": 71}
+    reg.sessions["b"].rate_limits = []
+    reg.sessions["a"].rate_limits = []
+    assert reg.rate_limits(now=now) is None

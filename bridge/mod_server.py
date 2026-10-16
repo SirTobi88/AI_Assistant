@@ -179,10 +179,34 @@ class ModRegistry:
     # ---- limits
 
     def rate_limits(self, now: float | None = None) -> list | None:
-        """The freshest rate-limit windows any session reported, or None."""
+        """The current rate-limit windows, merged over every session, or None.
+
+        Each session reports what its own last request saw; one that has made
+        no request yet reports a window without a reset time, and one idle for
+        hours an expired window. Per kind the window that resets last is the
+        current one (several sessions on it: the highest use wins)."""
         now = time.time() if now is None else now
-        fresh = [s for s in self.sessions.values() if s.rate_limits and now - s.rate_ts < RATE_FRESH_S]
-        return max(fresh, key=lambda s: s.rate_ts).rate_limits if fresh else None
+        best: dict = {}
+        for s in self.sessions.values():
+            if not s.rate_limits or now - s.rate_ts >= RATE_FRESH_S:
+                continue
+            for r in s.rate_limits:
+                if not isinstance(r, dict):
+                    continue
+                t = _reset_ts(r)
+                if t is None or t <= now:
+                    continue
+                key = (t, float(r.get("percentUsed") or 0))
+                if r.get("kind") not in best or key > best[r.get("kind")][0]:
+                    best[r.get("kind")] = (key, r)
+        return [r for _, r in best.values()] or None
+
+
+def _reset_ts(r: dict) -> float | None:
+    try:
+        return datetime.fromisoformat(str(r["resetsAt"]).replace("Z", "+00:00")).timestamp()
+    except (KeyError, ValueError, TypeError):
+        return None
 
 
 def usage_payload(rate_limits: list, now: float | None = None) -> dict | None:
