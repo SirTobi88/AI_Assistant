@@ -19,8 +19,8 @@ static TaskHandle_t task = nullptr;
 static void reader_task(void*) {
     int16_t chunk[256];
     for (;;) {
-        if (!running) { vTaskDelay(pdMS_TO_TICKS(20)); continue; }
         const size_t got = i2s.readBytes((char*)chunk, sizeof(chunk)) / sizeof(int16_t);
+        if (!running) continue;
         for (size_t i = 0; i < got; i++) {
             const size_t next = (head + 1) % RING_SAMPLES;
             if (next == tail) break;          // reader fell behind: drop the newest
@@ -30,26 +30,29 @@ static void reader_task(void*) {
     }
 }
 
-bool mic_hal_start(void) {
-    if (running) return true;
+static bool ready = false;
+
+// The port stays claimed from boot on (the sound output would take I2S0
+// otherwise); between takes the task just drops what it reads.
+void mic_hal_init(void) {
     i2s.setPinsPdmRx(MIC_PDM_CLK, MIC_PDM_DATA);
     if (!i2s.begin(I2S_MODE_PDM_RX, MIC_SAMPLE_RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO)) {
         Serial.println("mic: I2S PDM init failed");
-        return false;
+        return;
     }
     i2s.setTimeout(50);
+    ready = true;
+    xTaskCreatePinnedToCore(reader_task, "mic", 4096, nullptr, 5, &task, 0);
+}
+
+bool mic_hal_start(void) {
+    if (!ready) return false;
     head = tail = 0;
     running = true;
-    if (!task) xTaskCreatePinnedToCore(reader_task, "mic", 4096, nullptr, 5, &task, 0);
     return true;
 }
 
-void mic_hal_stop(void) {
-    if (!running) return;
-    running = false;
-    delay(30);                               // let the task leave readBytes
-    i2s.end();
-}
+void mic_hal_stop(void) { running = false; }
 
 size_t mic_hal_read(int16_t* out, size_t max) {
     size_t n = 0;

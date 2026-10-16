@@ -9,6 +9,10 @@
 
 #define MIC_SAMPLE_RATE 16000
 
+// Claims the microphone's I2S port at boot, before sound_hal_init(): PDM
+// input exists on I2S0 only, and the sound output would otherwise take it.
+void   mic_hal_init(void);
+
 bool   mic_hal_start(void);
 void   mic_hal_stop(void);
 // Samples recorded since the last call, up to max; never blocks.

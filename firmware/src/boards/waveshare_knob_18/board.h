@@ -66,6 +66,8 @@
 // can't give a charge level.
 #define BOARD_HAS_BATTERY          0
 #define BOARD_HAS_IO_EXPANDER      0
-// The PCM5100A DAC only has a line-out on the expansion connector, and its
-// mute pin (XSMT) is driven by the second MCU.
-#define BOARD_HAS_SOUND            0
+// The PCM5100A DAC drives the 3.5 mm line-out only (no speaker): sound.cpp.
+#define BOARD_HAS_SOUND            1
+#define SND_I2S_BCLK               39
+#define SND_I2S_WS                 40
+#define SND_I2S_DOUT               41

@@ -25,6 +25,7 @@
 #include "hal/power_hal.h"
 #include "hal/imu_hal.h"
 #include "hal/sound_hal.h"
+#include "hal/mic_hal.h"
 
 static UsageData usage = {};
 
@@ -333,6 +334,7 @@ void setup() {
 
     power_hal_init();
     imu_hal_init();
+    mic_hal_init();     // before sound: PDM input needs I2S0
     sound_hal_init();
     // Last volume the daemon sent, so sounds played before (or without) a
     // host connection — the pairing cues — already have the right level.

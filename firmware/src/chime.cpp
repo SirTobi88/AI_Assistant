@@ -74,12 +74,13 @@ bool chime_init(const ChimeConfig& c) {
         Serial.println("chime: I2S init failed");
         return false;
     }
-    if (!es8311_setup()) {
+    // es8311_addr 0: a DAC that needs no setup over I2C (the Knob-1.8's PCM5100A).
+    if (cfg.es8311_addr && !es8311_setup()) {
         Serial.println("chime: ES8311 init failed");
         return false;
     }
     ready = true;
-    Serial.println("chime: ES8311 ready");
+    Serial.println(cfg.es8311_addr ? "chime: ES8311 ready" : "chime: DAC ready");
     return true;
 }
 

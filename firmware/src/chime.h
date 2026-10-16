@@ -16,7 +16,7 @@ typedef void (*amp_enable_fn)(bool on);
 struct ChimeConfig {
     int          mclk, bclk, ws, dout, din;  // I2S GPIOs
     int          sample_rate;                // must match the embedded PCM (44100)
-    uint8_t      es8311_addr;                // codec I2C address (0x18)
+    uint8_t      es8311_addr;                // codec I2C address (0x18); 0 = plain I2S DAC
     uint8_t      volume;                     // 0..100
     amp_enable_fn amp_enable;                // power-amp on/off hook (nullable)
 };
