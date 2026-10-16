@@ -40,7 +40,8 @@ static uint8_t   act[RING_MAX_ITEMS];
 static int16_t   arg[RING_MAX_ITEMS];
 
 static const char* pick_key = "model";       // V_PICK: which setting
-static char menu_sid[PROTO_ID_LEN] = "";               // mode picker open: the app's menu is shown for it
+static char menu_sid[PROTO_ID_LEN] = "";               // mode/model picker open: the app's menu is shown for it
+static const char* menu_key = "mode";                  // which of the app's menus
 static char      prompt_id[PROTO_ID_LEN];     // V_PROMPT: the one on screen
 static char      last_auto_prompt[PROTO_ID_LEN];
 static uint8_t   multi_sel = 0;               // V_PROMPT multi-select bits
@@ -304,9 +305,9 @@ static void build_stt(int focus) {
 
 static void build(view_t v, int focus) {
     if (v != V_BRIGHT) ring_set_hold(ring, 0);
-    // Leaving the mode picker without a choice closes the app's menu again.
+    // Leaving the picker without a choice closes the app's menu again.
     if (menu_sid[0] && v != V_PICK) {
-        proto_send_menu(menu_sid, "mode", false);
+        proto_send_menu(menu_sid, menu_key, false);
         menu_sid[0] = 0;
     }
     view = v;
@@ -334,7 +335,7 @@ static void open_view(view_t v, int focus = -1) {
 
 static void close_app(void) {
     if (menu_sid[0]) {
-        proto_send_menu(menu_sid, "mode", false);
+        proto_send_menu(menu_sid, menu_key, false);
         menu_sid[0] = 0;
     }
     view = V_CLOSED;
@@ -394,6 +395,13 @@ static bool needs_hold_now(void) {
     return false;
 }
 
+// The app shows its own menu next to the knob's picker (desktop + keystrokes).
+static void open_app_menu(const char* sid, const char* key) {
+    snprintf(menu_sid, sizeof(menu_sid), "%s", sid);
+    menu_key = key;
+    proto_send_menu(menu_sid, menu_key, true);
+}
+
 static void activate(bool confirmed) {
     const int f = ring_focus(ring);
     SessRow* s = (SessRow*)proto_active_session();
@@ -403,11 +411,12 @@ static void activate(bool confirmed) {
     case A_BACK:      back(); break;
     case A_PROMPTS:   prompt_return = V_MAIN; open_next_prompt(); break;
     case A_SESSIONS:  open_view(V_SESSIONS); break;
-    case A_MODEL:     if (!s) { show_hint(need_sess); break; } pick_key = "model";  open_view(V_PICK); break;
+    case A_MODEL:     if (!s) { show_hint(need_sess); break; } pick_key = "model";  open_view(V_PICK);
+                      open_app_menu(s->sid, "model");
+                      break;
     case A_EFFORT:    if (!s) { show_hint(need_sess); break; } pick_key = "effort"; open_view(V_PICK); break;
     case A_MODE:      if (!s) { show_hint(need_sess); break; } pick_key = "mode";   open_view(V_PICK);
-                      snprintf(menu_sid, sizeof(menu_sid), "%s", s->sid);
-                      proto_send_menu(menu_sid, "mode", true);
+                      open_app_menu(s->sid, "mode");
                       break;
     case A_MONITOR:   open_view(V_MONITOR); break;
     case A_BRIGHT:    open_view(V_BRIGHT); break;

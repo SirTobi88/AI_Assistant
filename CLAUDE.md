@@ -61,7 +61,7 @@
   Accept edits, Plan. `bypassPermissions` setzt der Knob nie. Der Knob folgt der Session mit dem
   letzten Prompt (Mod meldet `prompted`/`prompted_at`).
 - Modell vom Knob (Desktop, `control = keys`): Menü der App Cmd+Shift+I + Ziffer (Opus, Sonnet,
-  Fable, Haiku), damit auch die Auswahl unter dem Eingabefeld wechselt; `/model` aus dem Mod ändert
+  Fable, Haiku), damit auch die Auswahl unter dem Eingabefeld wechselt; das Menü geht wie beim Modus schon beim Öffnen der Auswahl am Knob auf; `/model` aus dem Mod ändert
   nur die Engine. CLI und Tastenkürzel aus: weiter `/model` im Mod. Tasten an die Desktop-App gehen
   immer über den globalen Tastenstrom (nicht `tell process`).
 - Spracheingabe: Halten am Knob (im Menü) nimmt über das PDM-Mikro auf (GPIO 45/46, I2S0,

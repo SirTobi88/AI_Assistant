@@ -150,7 +150,23 @@ def test_desktop_mode_menu_closed_with_esc_when_the_knob_goes_back():
 def test_menu_command_parses():
     cmd = protocol.parse_command({"t": "menu", "sid": "abc", "k": "mode", "open": 1})
     assert cmd.t == "menu" and cmd.args == {"sid": "abc", "key": "mode", "open": True}
-    assert protocol.parse_command({"t": "menu", "sid": "abc", "k": "model", "open": 1}) is None
+    assert protocol.parse_command({"t": "menu", "sid": "abc", "k": "model", "open": 1}).args["key"] == "model"
+    assert protocol.parse_command({"t": "menu", "sid": "abc", "k": "effort", "open": 1}) is None
+
+
+def test_desktop_model_menu_opens_on_the_knob_and_then_takes_only_the_digit():
+    sent = []
+    a = c.KeystrokeAdapter(log=lambda m: None, run=sent.append, cfg={})
+    s = protocol.Session("d", "x", entrypoint="claude-desktop")
+    assert a.menu(s, "model", True)
+    assert 'keystroke "i" using {command down, shift down}' in sent[-1]
+    assert a.set(s, "model", "haiku")
+    assert 'keystroke "i"' not in sent[-1] and "key code 21" in sent[-1]
+    assert "activate" not in sent[-1]
+    # the open model menu does not count for a mode change
+    a.menu(s, "model", True)
+    a.set(s, "mode", "plan")
+    assert 'keystroke "m" using {command down, shift down}' in sent[-1]
 
 
 def test_desktop_model_menu_follows_the_app_order():

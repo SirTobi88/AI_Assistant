@@ -201,9 +201,9 @@ def parse_command(obj: dict | None) -> Command | None:
             return None
         return Command(t, {"sid": obj["sid"], "key": k, "value": v})
     if t == "menu":
-        if obj.get("k") != "mode" or not isinstance(obj.get("sid"), str):
+        if obj.get("k") not in ("mode", "model") or not isinstance(obj.get("sid"), str):
             return None
-        return Command(t, {"sid": obj["sid"], "key": "mode", "open": bool(obj.get("open"))})
+        return Command(t, {"sid": obj["sid"], "key": obj["k"], "open": bool(obj.get("open"))})
     if t == "ptt":
         return Command(t, {"on": bool(obj.get("on"))})
     if t in ("stt_send", "stt_drop"):

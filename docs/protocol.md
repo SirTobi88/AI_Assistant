@@ -98,7 +98,7 @@ Mehrere offene Prompts stehen in einer Warteschlange; der Knob zeigt den ältest
 | Session wechseln | `{"t":"switch","sid":"c3d4"}` |
 | Einstellung setzen | `{"t":"set","sid":"a1b2","k":"model","v":"sonnet"}` — `k`: `model`·`effort`·`mode`·`fast` |
 | Unterbrechen | `{"t":"interrupt","sid":"a1b2"}` |
-| Modus-Menü der App | `{"t":"menu","sid":"a1b2","k":"mode","open":1}` beim Öffnen der Modus-Auswahl, `"open":0` beim Verlassen ohne Wahl. Nur Desktop-App mit `control = keys`: Cmd+Shift+M bzw. Esc; das folgende `set` drückt dann nur die Ziffer |
+| Modus-/Modell-Menü der App | `{"t":"menu","sid":"a1b2","k":"mode","open":1}` (bzw. `"k":"model"`) beim Öffnen der Modus- bzw. Modell-Auswahl, `"open":0` beim Verlassen ohne Wahl. Nur Desktop-App mit `control = keys`: Cmd+Shift+M bzw. Cmd+Shift+I, zurück Esc; das folgende `set` drückt dann nur die Ziffer |
 | Push-to-talk | `{"t":"ptt","on":1}` / `{"t":"ptt","on":0}` |
 | Transkript senden/verwerfen | `{"t":"stt_send","id":"v3"}` / `{"t":"stt_drop","id":"v3"}` |
 | Hallo (nach Verbindung) | `{"t":"hello","v":1,"fw":"0.1.0"}` |

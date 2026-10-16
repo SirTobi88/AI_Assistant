@@ -137,7 +137,10 @@ def plan_set(target: Target, key: str, value, current: dict, cfg: dict | None = 
     elif target.kind == "desktop":
         focus = ("desktop",)
         if key == "model":
-            return Plan(focus, _menu("i", _order(cfg, "desktop_models", DESKTOP_MODELS), str(value)))
+            keys = _menu("i", _order(cfg, "desktop_models", DESKTOP_MODELS), str(value))
+            if current.get("menu_open"):
+                return Plan(focus, keys[-1:], activate=False)
+            return Plan(focus, keys)
         if key == "effort":
             return Plan(focus, _menu("e", _order(cfg, "desktop_efforts", DESKTOP_EFFORTS), str(value)))
         if key == "mode":
@@ -155,13 +158,16 @@ def plan_set(target: Target, key: str, value, current: dict, cfg: dict | None = 
     raise Unsupported(f"{key} for {target.kind}")
 
 
+MENU_LETTERS = {"mode": "m", "model": "i"}
+
+
 def plan_menu(target: Target, key: str, open_: bool) -> Plan:
-    """Show the desktop app's mode menu while the knob's mode picker is open
-    (Cmd+Shift+M), close it with Esc when the knob leaves without a choice."""
-    if target.kind != "desktop" or key != "mode":
+    """Show the desktop app's mode/model menu while the knob's picker is open
+    (Cmd+Shift+M / I), close it with Esc when the knob leaves without a choice."""
+    if target.kind != "desktop" or key not in MENU_LETTERS:
         raise Unsupported(f"no {key} menu for {target.kind}")
     if open_:
-        return Plan(("desktop",), [("char", "m", ("command", "shift"))])
+        return Plan(("desktop",), [("char", MENU_LETTERS[key], ("command", "shift"))])
     return Plan(("desktop",), [("code", KEY_ESC, ())], activate=False)
 
 
