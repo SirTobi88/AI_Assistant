@@ -1364,6 +1364,19 @@ void ui_init(void) {
         lv_obj_set_pos(logo_img, L.margin, top);
 #endif
     }
+#ifdef BOARD_HAS_PSRAM
+    else if (L.round) {
+        // Round panels have no corner, but the band left of the clock is
+        // free: Clawd stands there on the top edge of the panels, mirroring
+        // the battery icon, and plays the host's state as in the corner.
+        int title_w = 0;
+        for (const char* p = "00:00"; *p; p++)
+            title_w += lv_font_get_glyph_width(L.title_font, (uint32_t)p[0], (uint32_t)p[1]);
+        const int title_left = (L.scr_w - title_w) / 2 + L.title_nudge;
+        const int slot_x = 58;   // inside the circle down to the top of a 15-cell sprite
+        splash_mascot_create(scr, slot_x, L.combo_y - 4, 3, title_left - slot_x);
+    }
+#endif
 
     battery_img = lv_image_create(scr);
     lv_image_set_src(battery_img, &battery_dscs[0]);
