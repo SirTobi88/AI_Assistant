@@ -203,6 +203,19 @@ static void start_advertising() {
         server ? (unsigned)server->getConnectedCount() : 0);
 }
 
+// Bump whenever characteristics are added or removed (2: AUDIO …0005).
+#define GATT_LAYOUT 2
+
+static void announce_gatt_layout(NimBLEServer* s) {
+    prefs.begin("clawd", false);
+    const uint32_t seen = prefs.getUInt("gatt", 0);
+    if (seen != GATT_LAYOUT) prefs.putUInt("gatt", GATT_LAYOUT);
+    prefs.end();
+    if (seen == GATT_LAYOUT || !s) return;
+    Serial.printf("BLE: GATT layout %u -> %u, sending Service Changed\n", (unsigned)seen, GATT_LAYOUT);
+    s->sendServiceChangedIndication();
+}
+
 class ServerCallbacks : public NimBLEServerCallbacks {
     void onConnect(NimBLEServer* s, NimBLEConnInfo& info) override {
         state = BLE_STATE_CONNECTED;
@@ -271,6 +284,9 @@ class ServerCallbacks : public NimBLEServerCallbacks {
         // the host insists the two are paired.
         if (info.isBonded() && info.isEncrypted()) auth_fail_ms = 0;
         else auth_fail_ms = millis() | 1;   // never 0; 0 means "never happened"
+        // A bonded host caches the GATT table (macOS does): after a firmware
+        // added a characteristic, say so once, or the host never sees it.
+        if (info.isBonded() && info.isEncrypted()) announce_gatt_layout(server);
         // Bonded reconnects START at the central's clamped parameters (no
         // later update event fires), so the supervision-timeout pushback must
         // also arm here, not just in onConnParamsUpdate.

@@ -71,3 +71,6 @@
   `whisper_model`, `whisper_lang`). Sim: `SIM_MIC_WAV=<16-kHz-WAV>` statt Mikro, Kanal `A` im
   virtuellen Knob. Test-Stimme: `say -v Anna -o x.wav --data-format=LEI16@16000 "…"`.
   Halten drückt keine HID-Leertaste mehr (tippte in der Desktop-App Leerzeichen).
+- GATT-Änderungen: macOS cached die Merkmale gekoppelter Geräte. Neues Merkmal → `GATT_LAYOUT` in
+  `ble.cpp` erhöhen; die Firmware schickt dann einmal „Service Changed“. Die Bridge hängt dabei
+  einmal (Verbindung mit altem Cache) → Bridge neu starten, danach ist das Merkmal da.
