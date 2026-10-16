@@ -196,8 +196,8 @@ class ModRegistry:
 
         Each session reports what its own last request saw; one that has made
         no request yet reports a window without a reset time, and one idle for
-        hours an expired window. Per kind the window that resets last is the
-        current one (several sessions on it: the highest use wins)."""
+        hours an expired window. Per kind the window that resets last (to 5
+        minutes) is the current one; several sessions on it: the highest use wins."""
         now = time.time() if now is None else now
         best: dict = {}
         for s in self.sessions.values():
@@ -209,7 +209,8 @@ class ModRegistry:
                 t = _reset_ts(r)
                 if t is None or t <= now:
                     continue
-                key = (t, float(r.get("percentUsed") or 0))
+                # Reset times of one window differ by seconds between sessions.
+                key = (round(t / 300), float(r.get("percentUsed") or 0))
                 if r.get("kind") not in best or key > best[r.get("kind")][0]:
                     best[r.get("kind")] = (key, r)
         return [r for _, r in best.values()] or None

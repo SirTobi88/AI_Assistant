@@ -225,6 +225,8 @@ def test_rate_limits_merge_to_the_current_window():
                                             {"kind": "seven_day", "percentUsed": 71, "resetsAt": later}]})
     # a fresh session without a request yet, and one with an expired window
     reg.report({"sid": "c", "rate_limits": [{"kind": "five_hour", "percentUsed": 0, "resetsAt": None}]})
+    # same window, reset a few seconds off, older reading
+    reg.report({"sid": "e", "rate_limits": [{"kind": "five_hour", "percentUsed": 50, "resetsAt": "2027-01-15T08:30:04Z"}]})
     reg.report({"sid": "d", "rate_limits": [{"kind": "five_hour", "percentUsed": 3, "resetsAt": "2020-01-01T00:00:00Z"}]})
     for s in reg.sessions.values():
         s.rate_ts = now
