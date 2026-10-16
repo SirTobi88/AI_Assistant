@@ -62,12 +62,12 @@ async function call($: EngineInterface, method: string, path: string, body?: unk
 }
 
 // Never throws: it runs unawaited from hooks and timers.
-async function report($: EngineInterface): Promise<void> {
+async function report($: EngineInterface, prompted = false): Promise<void> {
   if (!sid) return
   try {
     const usage: any = await $.session.usage().catch(() => ({}))
     await call($, 'POST', '/v1/state', {
-      sid, state, mode, effort, fast, title,
+      sid, state, mode, effort, fast, title, prompted,
       model: await $.session.model(),
       cwd: await $.session.cwd(),
       ctx_pct: usage.context?.percent ?? -1,
@@ -209,6 +209,7 @@ export const register: Register = on => {
     mode = String(e.permission_mode ?? mode)
     effort = String((e as any).effort ?? effort)
     title = String((e as any).session_title ?? title)
+    void report($, true)   // typed here: the knob follows this session
     return next(e)
   })
 

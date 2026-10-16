@@ -227,3 +227,17 @@ def test_rate_limits_merge_to_the_current_window():
     reg.sessions["b"].rate_limits = []
     reg.sessions["a"].rate_limits = []
     assert reg.rate_limits(now=now) is None
+
+
+def test_knob_follows_the_session_last_typed_in():
+    reg = ms.ModRegistry(log=lambda m: None)
+    reg.report({"sid": "a"})
+    reg.report({"sid": "b"})
+    assert reg.take_new_focus() is None
+    reg.report({"sid": "b", "prompted": True})
+    assert reg.take_new_focus() == "b"
+    # once taken, a manual pick on the knob holds until the next prompt
+    reg.report({"sid": "b"})
+    assert reg.take_new_focus() is None
+    reg.report({"sid": "a", "prompted": True})
+    assert reg.take_new_focus() == "a"

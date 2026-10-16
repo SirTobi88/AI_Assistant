@@ -68,6 +68,7 @@ class ModSession:
     rate_limits: list = field(default_factory=list)
     rate_ts: float = 0.0
     seen: float = 0.0
+    prompt_ts: float = 0.0                            # last prompt typed in this session
     commands: list = field(default_factory=list)
     pending: dict = field(default_factory=dict)       # key -> value queued, not yet confirmed
     wake: asyncio.Event = field(default_factory=asyncio.Event)
@@ -91,6 +92,7 @@ class ModRegistry:
     def __init__(self, log=print) -> None:
         self.log = log
         self.sessions: dict[str, ModSession] = {}
+        self._focus_ts = 0.0
 
     def has(self, sid: str | None) -> bool:
         return bool(sid) and sid in self.sessions
@@ -128,6 +130,17 @@ class ModRegistry:
                 setattr(s, key, int(body[key]))
         if isinstance(body.get("rate_limits"), list) and body["rate_limits"]:
             s.rate_limits, s.rate_ts = body["rate_limits"], now
+        if body.get("prompted") is True:
+            s.prompt_ts = now
+
+    def take_new_focus(self) -> str | None:
+        """The session a prompt was typed in since the last call, if any: the
+        one in front of the user, so the knob follows it."""
+        latest = max(self.sessions.values(), key=lambda s: s.prompt_ts, default=None)
+        if latest is None or latest.prompt_ts <= self._focus_ts:
+            return None
+        self._focus_ts = latest.prompt_ts
+        return latest.sid
 
     def bye(self, sid: str) -> None:
         if self.sessions.pop(sid, None):

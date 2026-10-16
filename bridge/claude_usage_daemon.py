@@ -1145,7 +1145,8 @@ async def hub_loop(hub: "Hub", stop_event: asyncio.Event) -> None:
     last_monitor = 0.0
     while not stop_event.is_set():
         try:
-            await hub.set_sessions(current_sessions())
+            # The knob follows the session a prompt was last typed in.
+            await hub.set_sessions(current_sessions(), active=MODS.take_new_focus())
             now = time.time()
             if hub.connected and hub.active and now - last_monitor >= MONITOR_TICK:
                 last_monitor = now

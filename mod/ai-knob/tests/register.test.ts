@@ -120,3 +120,14 @@ test('a mode from the knob goes through the app session tool', async ($, on) => 
   expect(JSON.stringify(mcp[0])).toContain('"self"')
   expect(seen.find(s => s.path === '/v1/result').body.ok).toBe(true)
 })
+
+test('a prompt typed in the session tells the bridge to follow it', async ($, on) => {
+  const seen: any[] = []
+  fakeSession(on)
+  fakeBridge(on, { '/v1/state': { ok: true } }, seen)
+  on('classic.UserPromptSubmit', () => ({}))
+  await start($)
+  await $.classic.UserPromptSubmit({ prompt: 'hi', permission_mode: 'default' } as any)
+  for (let i = 0; i < 200 && !seen.some(s => s.body?.prompted === true); i++) await new Promise(r => setTimeout(r, 5))
+  expect(seen.some(s => s.path === '/v1/state' && s.body.prompted === true)).toBe(true)
+})
