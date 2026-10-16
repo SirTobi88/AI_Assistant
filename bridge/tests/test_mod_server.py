@@ -249,3 +249,21 @@ def test_knob_follows_the_session_last_typed_in():
     fresh.report({"sid": "a", "prompted_at": 1_000_000})
     fresh.report({"sid": "b", "prompted_at": 2_000_000})
     assert fresh.take_new_focus() == "b"
+
+
+def test_mode_set_by_keystroke_survives_the_mods_heartbeat():
+    reg = ms.ModRegistry(log=lambda m: None)
+    reg.hello({"sid": "d", "entrypoint": "claude-desktop"})
+    reg.report({"sid": "d", "mode": "auto"})
+
+    class Keys:
+        def set(self, s, k, v): return True
+
+    assert control.ModAdapter(reg, Keys(), log=lambda m: None).set(protocol.Session("d", "x"), "mode", "plan")
+    reg.report({"sid": "d", "mode": "auto"})          # heartbeat repeating the old reading
+    assert reg.sessions["d"].mode == "plan"
+    reg.report({"sid": "d", "mode": "acceptEdits"})   # a new reading from a prompt wins
+    assert reg.sessions["d"].mode == "acceptEdits"
+    reg.set_mode("d", "plan")
+    reg.report({"sid": "d", "mode": "acceptEdits", "prompted": True})   # set back in the app, then typed
+    assert reg.sessions["d"].mode == "acceptEdits"

@@ -357,7 +357,10 @@ class ModAdapter:
             # Keystrokes when enabled: the app's own tool refuses a call from
             # the mod in auto mode (docs/mod-api-findings.md).
             if self.fallback is not None or not desktop:
-                return self._fallback("set", session, key, value)
+                done = self._fallback("set", session, key, value)
+                if done:
+                    self.registry.set_mode(session.sid, value)
+                return done
             if value not in MOD_MODES:
                 self.log(f"control: mode={value!r} not allowed")
                 return False

@@ -62,6 +62,7 @@ class ModSession:
     model: str = ""
     effort: str = ""
     mode: str = "default"
+    reported_mode: str = ""                           # the mod's last own reading of the mode
     fast: bool = False
     ctx_pct: int = -1
     tokens: int = -1
@@ -118,7 +119,14 @@ class ModRegistry:
             if body["state"] != s.state:
                 s.state_ts = now
             s.state = body["state"]
-        for key in ("model", "effort", "mode", "cwd", "title"):
+        # The mod only reads the mode from a prompt and repeats it with every
+        # heartbeat; a change by keystroke (control.py) would be overwritten
+        # by that repeat, so only a new reading counts.
+        # (A report sent right at a prompt is always a fresh reading.)
+        if isinstance(body.get("mode"), str) and body["mode"] and (
+                body["mode"] != s.reported_mode or body.get("prompted") is True):
+            s.mode = s.reported_mode = body["mode"]
+        for key in ("model", "effort", "cwd", "title"):
             if isinstance(body.get(key), str) and body[key]:
                 if key == "model" and body[key] != s.model:
                     self.log(f"Mod {s.sid[:8]} reports model {body[key]!r} (was {s.model!r})")
@@ -135,6 +143,11 @@ class ModRegistry:
         elif isinstance(body.get("prompted_at"), (int, float)) and not s.prompt_ts:
             # the mod's own record (ms), for a bridge that started after the prompt
             s.prompt_ts = body["prompted_at"] / 1000
+
+    def set_mode(self, sid: str, mode: str) -> None:
+        """A mode set outside the mod (keystrokes) that it can't see."""
+        if sid in self.sessions:
+            self.sessions[sid].mode = mode
 
     def take_new_focus(self) -> str | None:
         """The session a prompt was typed in since the last call, if any: the
