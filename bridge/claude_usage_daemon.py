@@ -437,14 +437,20 @@ def add_activity_fields(payload: dict) -> str | None:
     config opts in. Returns the animation
     name sent, or None when activity is off (fields omitted entirely)."""
     opts = read_activity_settings()
+    hooks = knob_activity.is_installed()
+    from_mods = MODS.anim()
     active = opts["activity"] == "on" or (
-        opts["activity"] == "auto" and knob_activity.is_installed())
+        opts["activity"] == "auto" and (hooks or from_mods is not None))
     if not active:
         for k in ("a", "sm", "ua", "ss"):
             payload.pop(k, None)
         return None
     limit_hit = int(payload.get("s", 0) or 0) >= 100 or int(payload.get("w", 0) or 0) >= 100
     anim = knob_activity.current_anim(limit_hit=limit_hit)
+    # Sessions running the mod report their state themselves (no hook files).
+    if from_mods is not None and not limit_hit:
+        order = knob_activity._PRIORITY
+        anim = min(anim, from_mods, key=lambda a: order.index(a) if a in order else len(order))
     payload["a"] = anim
     payload["sm"] = _SCREEN_MODES[opts["screen_mode"]]
     payload["ua"] = opts["corner_buddy"] == "on"
@@ -942,23 +948,24 @@ async def run_session(client, stop_event: asyncio.Event) -> bool:
             # themselves ($.session.usage()); while one does, no API poll.
             rate = MODS.rate_limits()
             mod_payload = mod_server.usage_payload(rate) if rate else None
-            if mod_payload is not None:
-                if session.refresh_requested.is_set() or elapsed >= MOD_USAGE_TICK:
-                    session.refresh_requested.clear()
-                    add_chime_field(mod_payload)
-                    add_clock_fields(mod_payload)
-                    last_anim = add_activity_fields(mod_payload)
-                    last_key = _activity_key(mod_payload)
-                    add_codex_fields(mod_payload)
-                    last_codex_check = now
-                    if await session.write_payload(mod_payload):
-                        last_poll = last_anim_sent = time.time()
-                        last_payload = mod_payload
-                        last_nodata = None
-                        used_successfully = True
-            elif not USAGE_POLL:
+            # Between the mod ticks a changed Claude Code state still goes out
+            # at once (the activity branch at the end of this chain).
+            if mod_payload is not None and (session.refresh_requested.is_set() or elapsed >= MOD_USAGE_TICK):
                 session.refresh_requested.clear()
-            elif session.refresh_requested.is_set() or elapsed >= POLL_INTERVAL:
+                add_chime_field(mod_payload)
+                add_clock_fields(mod_payload)
+                last_anim = add_activity_fields(mod_payload)
+                last_key = _activity_key(mod_payload)
+                add_codex_fields(mod_payload)
+                last_codex_check = now
+                if await session.write_payload(mod_payload):
+                    last_poll = last_anim_sent = time.time()
+                    last_payload = mod_payload
+                    last_nodata = None
+                    used_successfully = True
+            elif mod_payload is None and not USAGE_POLL:
+                session.refresh_requested.clear()
+            elif mod_payload is None and (session.refresh_requested.is_set() or elapsed >= POLL_INTERVAL):
                 session.refresh_requested.clear()
                 # Pure free-ride: read whatever access token(s) Claude Code
                 # currently holds across the configured config dirs and NEVER

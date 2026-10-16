@@ -149,6 +149,18 @@ class ModRegistry:
         if sid in self.sessions:
             self.sessions[sid].mode = mode
 
+    def anim(self, now: float | None = None) -> str | None:
+        """The buddy/state-sound name (knob_activity's vocabulary) for all mod
+        sessions together; None without any."""
+        views = self.views(now)
+        if not views:
+            return None
+        order = ("allow", "work coding", "work think", "done", "expression sleep")
+        name = {protocol.NEEDS_PERMISSION: "allow", protocol.ASKING: "allow",
+                protocol.TOOL: "work coding", protocol.THINKING: "work think",
+                protocol.COMPACTING: "work think", protocol.DONE: "done"}
+        return min((name.get(v.state, "expression sleep") for v in views), key=order.index)
+
     def take_new_focus(self) -> str | None:
         """The session a prompt was typed in since the last call, if any: the
         one in front of the user, so the knob follows it."""

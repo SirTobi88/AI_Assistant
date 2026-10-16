@@ -294,3 +294,13 @@ def test_a_reset_window_reads_as_unused():
     reg.sessions["a"].rate_ts = now
     p = ms.usage_payload(reg.rate_limits(now=now), now=now)
     assert (p["s"], p["sr"], p["w"]) == (0.0, -1, 44.0)
+
+
+def test_anim_from_mod_sessions():
+    reg = ms.ModRegistry(log=lambda m: None)
+    assert reg.anim() is None
+    reg.report({"sid": "a", "state": protocol.THINKING})
+    reg.report({"sid": "b", "state": protocol.IDLE})
+    assert reg.anim() == "work think"
+    reg.report({"sid": "b", "state": protocol.NEEDS_PERMISSION})
+    assert reg.anim() == "allow"
