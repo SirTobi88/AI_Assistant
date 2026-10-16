@@ -30,6 +30,9 @@ enum action_t {
 
 static lv_obj_t* overlay = nullptr;
 static RingMenu* ring = nullptr;
+// Fast mode in the main menu: off for now (not available in desktop sessions).
+static const bool SHOW_FAST = false;
+
 static view_t    view = V_CLOSED;
 static view_t    prompt_return = V_CLOSED;   // where a prompt / transcript goes back to
 static uint8_t   act[RING_MAX_ITEMS];
@@ -142,7 +145,7 @@ static void build_main(int focus) {
     item(n++, "Modell", s && *s->model ? s->model : "-", 0, A_MODEL);
     item(n++, "Reasoning", s && *s->effort ? s->effort : "-", 0, A_EFFORT);
     item(n++, "Modus", s && *s->mode ? s->mode : "-", 0, A_MODE);
-    item(n++, "Fast", s ? (s->fast ? "an" : "aus") : "-", 0, A_FAST);
+    if (SHOW_FAST) item(n++, "Fast", s ? (s->fast ? "an" : "aus") : "-", 0, A_FAST);
     if (s && s->ctx_pct >= 0) snprintf(buf, sizeof(buf), "Kontext %d %%", s->ctx_pct);
     else snprintf(buf, sizeof(buf), "Limits & Status");
     item(n++, "Monitor", buf, 0, A_MONITOR);
