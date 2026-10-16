@@ -46,7 +46,7 @@ def test_desktop_uses_menus_not_text():
     assert plan.keys[0] == ("char", "e", ("command", "shift"))
     assert plan.keys[-1] == ("char", "3", ())
     assert not any(k[0] == "text" for k in plan.keys)
-    assert c.plan_set(DESK, "mode", "plan", {}).keys[-1] == ("char", "3", ())
+    assert c.plan_set(DESK, "mode", "plan", {}).keys[-1] == ("char", "4", ())
 
 
 def test_desktop_menu_order_from_config():
