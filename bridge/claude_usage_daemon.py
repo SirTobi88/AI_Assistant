@@ -399,7 +399,9 @@ def read_activity_settings() -> dict:
     then — without hooks there is no state to show, and "on" would only ever
     report a sleeping Clawd.
     """
-    opts = {"activity": "auto", "screen_mode": "auto", "corner_buddy": "on",
+    # screen_mode "usage": the knob's home screen is the limits overview,
+    # which the menu falls back to after 30 s without input.
+    opts = {"activity": "auto", "screen_mode": "usage", "corner_buddy": "on",
             "state_sounds": "on"}
     allowed = {"activity": ("auto", "off", "on"),
                "state_sounds": ("off", "on"),

@@ -119,7 +119,7 @@ def test_payload_fields_follow_config(tmp_path, monkeypatch):
     monkeypatch.setattr(mod.knob_activity, "is_installed", lambda: True)
     p = {"s": 10, "w": 5}
     assert mod.add_activity_fields(p) == "done"
-    assert p == {"s": 10, "w": 5, "a": "done", "sm": 2, "ua": True, "ss": True}
+    assert p == {"s": 10, "w": 5, "a": "done", "sm": 0, "ua": True, "ss": True}
 
     cfg.write_text("activity = off\n")
     p = {"s": 10, "w": 5}

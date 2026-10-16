@@ -502,10 +502,20 @@ static void tap_timer_cb(lv_timer_t*) {
     activate(false);
 }
 
+static bool is_touch_event(lv_event_code_t c) {
+    return c == LV_EVENT_PRESSED || c == LV_EVENT_PRESSING || c == LV_EVENT_RELEASED ||
+           c == LV_EVENT_PRESS_LOST || c == LV_EVENT_SHORT_CLICKED ||
+           c == LV_EVENT_LONG_PRESSED || c == LV_EVENT_LONG_PRESSED_REPEAT;
+}
+
 static void overlay_event_cb(lv_event_t* e) {
     const uint32_t now = lv_tick_get();
-    last_input_ms = millis();
-    idle_note_activity();
+    // Registered for LV_EVENT_ALL: drawing and refresh events arrive here
+    // too and must not count as input, or the menu never closes by itself.
+    if (is_touch_event(lv_event_get_code(e))) {
+        last_input_ms = millis();
+        idle_note_activity();
+    }
     switch (lv_event_get_code(e)) {
     case LV_EVENT_PRESSED:
         press_ms = now;
