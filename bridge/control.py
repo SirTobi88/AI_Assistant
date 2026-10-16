@@ -349,9 +349,15 @@ class ModAdapter:
         if not self.registry.has(session.sid):
             return self._fallback("set", session, key, value)
         if key == "mode":
+            desktop = self.registry.sessions[session.sid].entrypoint == "claude-desktop"
+            if desktop and value == "plan":
+                # /plan in the session itself; close the app menu the knob opened.
+                if self.fallback is not None and hasattr(self.fallback, "menu"):
+                    self.fallback.menu(session, "mode", False)
+                return self.registry.queue(session.sid, {"t": "set", "key": "mode", "value": "plan"})
             # Keystrokes when enabled: the app's own tool refuses a call from
             # the mod in auto mode (docs/mod-api-findings.md).
-            if self.fallback is not None or self.registry.sessions[session.sid].entrypoint != "claude-desktop":
+            if self.fallback is not None or not desktop:
                 return self._fallback("set", session, key, value)
             if value not in MOD_MODES:
                 self.log(f"control: mode={value!r} not allowed")

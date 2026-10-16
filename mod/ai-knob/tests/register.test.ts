@@ -111,7 +111,7 @@ test('a mode from the knob goes through the app session tool', async ($, on) => 
   let polls = 0
   fakeBridge(on, {
     '/v1/hello': { ok: true }, '/v1/state': { ok: true }, '/v1/result': { ok: true },
-    '/v1/commands': () => (polls++ === 0 ? { commands: [{ t: 'set', key: 'mode', value: 'plan' }] } : null),
+    '/v1/commands': () => (polls++ === 0 ? { commands: [{ t: 'set', key: 'mode', value: 'default' }] } : null),
   }, seen)
   on('mcp.call', ($: any, e: any) => { mcp.push(e); return { value: { content: [{ type: 'text', text: 'ok' }], isError: false } } })
   await start($)
