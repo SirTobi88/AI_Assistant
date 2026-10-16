@@ -94,6 +94,18 @@ async function runCommand($: EngineInterface, cmd: any): Promise<void> {
     } else if (cmd.t === 'set' && cmd.key === 'effort') {
       await $.command.run({ command: 'effort', args: String(cmd.value) })
       effort = String(cmd.value)
+    } else if (cmd.t === 'set' && cmd.key === 'mode') {
+      // Desktop app only (the bridge sends it nowhere else): the app's own
+      // session tool, which shows its approval card before a mode that does
+      // more without asking.
+      const r: any = await $.mcp.call('ccd_session_mgmt', 'set_session_permission_mode',
+        { session_id: 'self', mode: String(cmd.value) })
+      if (r?.isError) {
+        ok = false
+        error = (r.content ?? []).map((c: any) => c.text ?? '').join(' ') || 'refused'
+      } else {
+        mode = String(cmd.value)
+      }
     } else if (cmd.t === 'set' && cmd.key === 'fast') {
       await $.command.run({ command: 'fast', args: cmd.value ? 'on' : 'off' })
       fast = Boolean(cmd.value)

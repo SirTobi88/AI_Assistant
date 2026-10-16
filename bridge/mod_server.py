@@ -118,6 +118,8 @@ class ModRegistry:
             s.state = body["state"]
         for key in ("model", "effort", "mode", "cwd", "title"):
             if isinstance(body.get(key), str) and body[key]:
+                if key == "model" and body[key] != s.model:
+                    self.log(f"Mod {s.sid[:8]} reports model {body[key]!r} (was {s.model!r})")
                 setattr(s, key, body[key])
         if isinstance(body.get("fast"), bool):
             s.fast = body["fast"]

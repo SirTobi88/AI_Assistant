@@ -274,19 +274,27 @@ class KeystrokeAdapter:
             return False
 
 
+# Modes the knob may ask the desktop app for; never bypassPermissions.
+MOD_MODES = ("default", "plan", "acceptEdits", "auto")
+
+
 class ModAdapter:
     """Sessions running the ai-knob mod carry commands out themselves
     (mod_server.ModRegistry queues them); everything the mod can't do — the
-    permission mode, sessions without the mod — goes to ``fallback`` (the
-    keystroke adapter when enabled), else it is reported as not possible."""
+    permission mode outside the desktop app, sessions without the mod — goes
+    to ``fallback`` (the keystroke adapter when enabled), else it is reported
+    as not possible. In the desktop app the mod sets the mode through the
+    app's own session tool, which asks on screen before a mode that does more
+    without asking."""
 
     def __init__(self, registry, fallback=None, log=print) -> None:
         self.registry, self.fallback, self.log = registry, fallback, log
 
     def _fallback(self, what: str, session, *args) -> bool:
         if self.fallback is None:
+            why = "the mod can't" if self.registry.has(session.sid) else "no mod for it"
             self.log(f"control: {what} for {session.label} not possible "
-                     "(no mod for it; keystrokes off)")
+                     f"({why}; keystrokes off)")
             return False
         return getattr(self.fallback, what)(session, *args)
 
@@ -295,8 +303,14 @@ class ModAdapter:
         return True if self.registry.has(session.sid) else self._fallback("switch", session)
 
     def set(self, session, key: str, value) -> bool:
-        if not self.registry.has(session.sid) or key == "mode":
+        if not self.registry.has(session.sid):
             return self._fallback("set", session, key, value)
+        if key == "mode":
+            if self.registry.sessions[session.sid].entrypoint != "claude-desktop":
+                return self._fallback("set", session, key, value)
+            if value not in MOD_MODES:
+                self.log(f"control: mode={value!r} not allowed")
+                return False
         if key == "model" and not valid_model(str(value)) or key == "effort" and value not in EFFORTS:
             self.log(f"control: {key}={value!r} not allowed")
             return False

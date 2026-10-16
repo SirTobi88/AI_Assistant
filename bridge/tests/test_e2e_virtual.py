@@ -35,7 +35,8 @@ def _run(sim_input: str, request: dict, ask_at: float):
     hub_sock, knob_sock = d / "hub.sock", d / "knob.sock"
     bridge = subprocess.Popen(
         [sys.executable, "-m", "bridge.claude_usage_daemon", "--virtual", str(knob_sock),
-         "--no-usage", "--hub-socket", str(hub_sock)],
+         "--no-usage", "--hub-socket", str(hub_sock),
+         "--mod-socket", str(hub_sock.parent / "mod.sock")],
         cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     sim = None
     try:

@@ -103,3 +103,20 @@ test('knob commands run as slash commands and report back', async ($, on) => {
   const result = seen.find(s => s.path === '/v1/result')
   expect(result.body.ok).toBe(true)
 })
+
+test('a mode from the knob goes through the app session tool', async ($, on) => {
+  const seen: any[] = []
+  const mcp: any[] = []
+  fakeSession(on)
+  let polls = 0
+  fakeBridge(on, {
+    '/v1/hello': { ok: true }, '/v1/state': { ok: true }, '/v1/result': { ok: true },
+    '/v1/commands': () => (polls++ === 0 ? { commands: [{ t: 'set', key: 'mode', value: 'plan' }] } : null),
+  }, seen)
+  on('mcp.call', ($: any, e: any) => { mcp.push(e); return { value: { content: [{ type: 'text', text: 'ok' }], isError: false } } })
+  await start($)
+  for (let i = 0; i < 200 && !seen.some(s => s.path === '/v1/result'); i++) await new Promise(r => setTimeout(r, 5))
+  expect(JSON.stringify(mcp[0])).toContain('set_session_permission_mode')
+  expect(JSON.stringify(mcp[0])).toContain('"self"')
+  expect(seen.find(s => s.path === '/v1/result').body.ok).toBe(true)
+})
