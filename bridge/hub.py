@@ -25,7 +25,7 @@ except ImportError:  # run as a script
 
 DEFAULT_MODELS = ["fable", "opus", "sonnet", "haiku"]
 DEFAULT_EFFORTS = ["low", "medium", "high", "xhigh", "max"]
-DEFAULT_MODES = ["default", "plan", "acceptEdits", "auto"]
+DEFAULT_MODES = ["auto", "default", "acceptEdits", "plan"]   # the desktop app's menu order
 
 
 class Adapter(_Protocol):

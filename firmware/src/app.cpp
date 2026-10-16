@@ -72,6 +72,16 @@ static const char* mode_hint(const char* m) {
     return "";
 }
 
+// Mode names as the desktop app shows them; the protocol keeps Claude Code's ids.
+static const char* mode_label(const char* m) {
+    if (!strcmp(m, "default"))           return "Manual";
+    if (!strcmp(m, "plan"))              return "Plan";
+    if (!strcmp(m, "acceptEdits"))       return "Accept edits";
+    if (!strcmp(m, "auto"))              return "Auto";
+    if (!strcmp(m, "bypassPermissions")) return "Bypass";
+    return m;
+}
+
 static int list_for(const char* key, const char** out, int cap) {
     AppState* st = proto_state();
     const OptionList* l = !strcmp(key, "model") ? &st->models : !strcmp(key, "effort") ? &st->efforts : &st->modes;
@@ -144,7 +154,7 @@ static void build_main(int focus) {
     item(n++, "Sessions", s ? s->label : "keine aktiv", 0, A_SESSIONS);
     item(n++, "Modell", s && *s->model ? s->model : "-", 0, A_MODEL);
     item(n++, "Reasoning", s && *s->effort ? s->effort : "-", 0, A_EFFORT);
-    item(n++, "Modus", s && *s->mode ? s->mode : "-", 0, A_MODE);
+    item(n++, "Modus", s && *s->mode ? mode_label(s->mode) : "-", 0, A_MODE);
     if (SHOW_FAST) item(n++, "Fast", s ? (s->fast ? "an" : "aus") : "-", 0, A_FAST);
     if (s && s->ctx_pct >= 0) snprintf(buf, sizeof(buf), "Kontext %d %%", s->ctx_pct);
     else snprintf(buf, sizeof(buf), "Limits & Status");
@@ -191,7 +201,7 @@ static void build_pick(int focus) {
         const char* hint = !strcmp(pick_key, "mode") ? mode_hint(vals[i]) : "";
         char sub[RING_LABEL_LEN];
         snprintf(sub, sizeof(sub), "%s%s%s", is_cur ? "aktuell" : "", is_cur && *hint ? " · " : "", hint);
-        item(i, vals[i], sub, 0, A_OPTION, (int16_t)i);
+        item(i, !strcmp(pick_key, "mode") ? mode_label(vals[i]) : vals[i], sub, 0, A_OPTION, (int16_t)i);
     }
     item(nv, "Zurück", "", 0, A_BACK);
     ring_set_title(ring, !strcmp(pick_key, "model") ? "Modell" : !strcmp(pick_key, "effort") ? "Reasoning" : "Modus");
