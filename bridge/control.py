@@ -138,10 +138,21 @@ def plan_set(target: Target, key: str, value, current: dict, cfg: dict | None = 
             # Never from the knob: it would stop every permission question.
             if value == "bypassPermissions":
                 raise Unsupported("bypassPermissions is not set from the knob")
-            return Plan(focus, _menu("m", _order(cfg, "desktop_modes", DESKTOP_MODES), str(value)))
+            keys = _menu("m", _order(cfg, "desktop_modes", DESKTOP_MODES), str(value))
+            # The knob opened the menu already (plan_menu): only the digit is left.
+            return Plan(focus, keys[-1:] if current.get("menu_open") else keys)
         if key == "fast":
             raise Unsupported("the desktop app has no shortcut for fast mode")
     raise Unsupported(f"{key} for {target.kind}")
+
+
+def plan_menu(target: Target, key: str, open_: bool) -> Plan:
+    """Show the desktop app's mode menu while the knob's mode picker is open
+    (Cmd+Shift+M), close it with Esc when the knob leaves without a choice."""
+    if target.kind != "desktop" or key != "mode":
+        raise Unsupported(f"no {key} menu for {target.kind}")
+    keys = [("char", "m", ("command", "shift"))] if open_ else [("code", KEY_ESC, ())]
+    return Plan(("desktop",), keys)
 
 
 def plan_interrupt(target: Target) -> Plan:
@@ -237,6 +248,7 @@ class KeystrokeAdapter:
         self.log = log
         self.cfg = cfg if cfg is not None else read_config()
         self._run = run or self._osascript
+        self.menu_open: str | None = None    # the app menu the knob opened (plan_menu)
 
     def _osascript(self, script: str) -> None:
         r = subprocess.run(["osascript", "-"], input=script, capture_output=True, text=True, timeout=10)
@@ -263,13 +275,28 @@ class KeystrokeAdapter:
             return False
 
     def set(self, session, key: str, value) -> bool:
+        menu_open, self.menu_open = self.menu_open == key, None
         try:
             plan = plan_set(target_for(session), key, value,
-                            {"mode": session.mode, "fast": session.fast}, self.cfg)
+                            {"mode": session.mode, "fast": session.fast, "menu_open": menu_open}, self.cfg)
         except Unsupported as e:
             self.log(f"control: {key}={value} for {session.label} not done: {e}")
             return False
         return self._do(f"{key}={value} for {session.label}", plan)
+
+    def menu(self, session, key: str, open_: bool) -> bool:
+        if not open_ and self.menu_open != key:
+            return True          # nothing of ours is open
+        try:
+            plan = plan_menu(target_for(session), key, open_)
+        except Unsupported as e:
+            self.log(f"control: {key} menu for {session.label} not shown: {e}")
+            return False
+        self.menu_open = key if open_ else None
+        if not self._do(f"{key} menu {'open' if open_ else 'closed'}", plan):
+            self.menu_open = None
+            return False
+        return True
 
     def interrupt(self, session) -> bool:
         try:
@@ -323,6 +350,10 @@ class ModAdapter:
             return False
         return self.registry.queue(session.sid, {"t": "set", "key": key,
                                                  "value": bool(value) if key == "fast" else value})
+
+    def menu(self, session, key: str, open_: bool) -> bool:
+        # Only the keystroke path has a menu to show.
+        return self.fallback.menu(session, key, open_) if self.fallback is not None else False
 
     def interrupt(self, session) -> bool:
         if not self.registry.has(session.sid):

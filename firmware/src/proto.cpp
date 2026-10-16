@@ -200,6 +200,12 @@ void proto_send_set_fast(const char* sid, bool on) {
     send_doc(doc);
 }
 
+void proto_send_menu(const char* sid, const char* key, bool open) {
+    JsonDocument doc;
+    doc["t"] = "menu"; doc["sid"] = sid; doc["k"] = key; doc["open"] = open ? 1 : 0;
+    send_doc(doc);
+}
+
 void proto_send_interrupt(const char* sid) {
     JsonDocument doc;
     doc["t"] = "interrupt"; doc["sid"] = sid;

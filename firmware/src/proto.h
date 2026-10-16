@@ -105,6 +105,9 @@ void proto_send_answer(const char* id, const uint8_t* choices, int n);
 void proto_send_switch(const char* sid);
 void proto_send_set(const char* sid, const char* key, const char* value);
 void proto_send_set_fast(const char* sid, bool on);
+// Mode picker opened / left without a choice: the bridge shows / closes the
+// desktop app's own mode menu.
+void proto_send_menu(const char* sid, const char* key, bool open);
 void proto_send_interrupt(const char* sid);
 void proto_send_ptt(bool on);
 void proto_send_stt(const char* id, bool send);

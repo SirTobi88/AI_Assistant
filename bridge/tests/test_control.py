@@ -117,3 +117,34 @@ def test_desktop_mode_digits_follow_the_app_menu():
     assert c.plan_set(DESK, "mode", "auto", {}).keys[-1] == ("char", "1", ())
     assert c.plan_set(DESK, "mode", "default", {}).keys[-1] == ("char", "2", ())
     assert c.plan_set(DESK, "mode", "plan", {}).keys[-1] == ("char", "4", ())
+
+
+def test_desktop_mode_menu_opens_on_the_knob_and_then_takes_only_the_digit():
+    sent = []
+    a = c.KeystrokeAdapter(log=lambda m: None, run=sent.append, cfg={})
+    s = protocol.Session("d", "x", entrypoint="claude-desktop")
+    assert a.menu(s, "mode", True)
+    assert 'keystroke "m" using {command down, shift down}' in sent[-1]
+    assert a.set(s, "mode", "plan")
+    assert 'keystroke "m"' not in sent[-1] and 'keystroke "4"' in sent[-1]
+    # the choice closed the menu: leaving the picker now presses nothing
+    n = len(sent)
+    assert a.menu(s, "mode", False) and len(sent) == n
+
+
+def test_desktop_mode_menu_closed_with_esc_when_the_knob_goes_back():
+    sent = []
+    a = c.KeystrokeAdapter(log=lambda m: None, run=sent.append, cfg={})
+    s = protocol.Session("d", "x", entrypoint="claude-desktop")
+    a.menu(s, "mode", True)
+    assert a.menu(s, "mode", False)
+    assert "key code 53" in sent[-1]
+    # a later set opens the menu itself again
+    a.set(s, "mode", "auto")
+    assert 'keystroke "m" using {command down, shift down}' in sent[-1]
+
+
+def test_menu_command_parses():
+    cmd = protocol.parse_command({"t": "menu", "sid": "abc", "k": "mode", "open": 1})
+    assert cmd.t == "menu" and cmd.args == {"sid": "abc", "key": "mode", "open": True}
+    assert protocol.parse_command({"t": "menu", "sid": "abc", "k": "model", "open": 1}) is None

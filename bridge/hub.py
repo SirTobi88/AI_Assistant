@@ -192,6 +192,11 @@ class Hub:
         if cmd.t == "interrupt":
             self.adapter.interrupt(session)
             return
+        if cmd.t == "menu":
+            menu = getattr(self.adapter, "menu", None)
+            if session is not None and menu is not None:
+                menu(session, a["key"], a["open"])
+            return
         if cmd.t == "hello":
             self.log(f"Knob says hello: protocol {a.get('v')}, firmware {a.get('fw')}")
             return
