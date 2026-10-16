@@ -191,6 +191,8 @@ class ModRegistry:
                 setattr(s, cmd["key"], cmd["value"])
         if not body.get("ok"):
             self.log(f"Mod {s.sid[:8]}: {cmd} failed: {body.get('error')}")
+        else:
+            self.log(f"Mod {s.sid[:8]}: {cmd} done")
 
     # ---- limits
 
