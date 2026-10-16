@@ -264,8 +264,10 @@ static void compute_layout(const BoardCaps& c) {
         L.gauge_track = THEME_RING_BG;
         L.gauge_ok    = THEME_ACCENT;
         L.title_font   = &font_tiempos_34;
-        L.title_y = 62;
-        L.title_nudge = 0;
+        // Clock up beside the battery, shifted right: the band left of it
+        // is Clawd's (see the mascot below).
+        L.title_y = 39;
+        L.title_nudge = 52;
         L.pct_font      = &font_styrene_48;
         L.ent_pct_font  = &font_tiempos_56;
         L.week_pct_font = &font_styrene_28;
@@ -1367,14 +1369,14 @@ void ui_init(void) {
 #ifdef BOARD_HAS_PSRAM
     else if (L.round) {
         // Round panels have no corner, but the band left of the clock is
-        // free: Clawd stands there on the top edge of the panels, mirroring
-        // the battery icon, and plays the host's state as in the corner.
+        // free: Clawd stands there on the top edge of the panels, a size
+        // up from the corner, and plays the host's state as in the corner.
         int title_w = 0;
         for (const char* p = "00:00"; *p; p++)
             title_w += lv_font_get_glyph_width(L.title_font, (uint32_t)p[0], (uint32_t)p[1]);
         const int title_left = (L.scr_w - title_w) / 2 + L.title_nudge;
-        const int slot_x = 58;   // inside the circle down to the top of a 15-cell sprite
-        splash_mascot_create(scr, slot_x, L.combo_y - 4, 3, title_left - slot_x);
+        const int slot_x = 56;   // inside the circle down to the sprite's top
+        splash_mascot_create(scr, slot_x, L.combo_y - 4, 4, title_left - 8 - slot_x);
     }
 #endif
 
