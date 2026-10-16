@@ -228,7 +228,7 @@ def test_rate_limits_merge_to_the_current_window():
     got = {r["kind"]: r["percentUsed"] for r in reg.rate_limits(now=now)}
     assert got == {"five_hour": 67, "seven_day": 71}
     reg.sessions["b"].rate_limits = []
-    reg.sessions["a"].rate_limits = reg.sessions["e"].rate_limits = []
+    reg.sessions["a"].rate_limits = reg.sessions["e"].rate_limits = reg.sessions["d"].rate_limits = []
     assert reg.rate_limits(now=now) is None
 
 
@@ -284,3 +284,13 @@ def test_desktop_model_goes_to_the_app_menu_when_keys_are_on():
     assert a.set(protocol.Session("t", "y"), "model", "sonnet") and reg.sessions["t"].commands[-1]["key"] == "model"
     assert control.ModAdapter(reg, None, log=lambda m: None).set(protocol.Session("d", "x"), "model", "opus")
     assert reg.sessions["d"].commands[-1] == {"t": "set", "key": "model", "value": "opus"}
+
+
+def test_a_reset_window_reads_as_unused():
+    reg = ms.ModRegistry(log=lambda m: None)
+    now = 1_800_000_000
+    reg.report({"sid": "a", "rate_limits": [{"kind": "five_hour", "percentUsed": 99, "resetsAt": "2020-01-01T00:00:00Z"},
+                                            {"kind": "seven_day", "percentUsed": 44, "resetsAt": "2027-01-20T08:00:00Z"}]})
+    reg.sessions["a"].rate_ts = now
+    p = ms.usage_payload(reg.rate_limits(now=now), now=now)
+    assert (p["s"], p["sr"], p["w"]) == (0.0, -1, 44.0)

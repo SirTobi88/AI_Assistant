@@ -214,10 +214,11 @@ class ModRegistry:
 
         Each session reports what its own last request saw; one that has made
         no request yet reports a window without a reset time, and one idle for
-        hours an expired window. Per kind the window that resets last (to 5
+        hours an expired window (= 0 % until a session opens the next one). Per kind the window that resets last (to 5
         minutes) is the current one; several sessions on it: the highest use wins."""
         now = time.time() if now is None else now
         best: dict = {}
+        expired: set = set()
         for s in self.sessions.values():
             if not s.rate_limits or now - s.rate_ts >= RATE_FRESH_S:
                 continue
@@ -225,12 +226,18 @@ class ModRegistry:
                 if not isinstance(r, dict):
                     continue
                 t = _reset_ts(r)
+                if t is not None and t <= now:
+                    expired.add(r.get("kind"))
                 if t is None or t <= now:
                     continue
                 # Reset times of one window differ by seconds between sessions.
                 key = (round(t / 300), float(r.get("percentUsed") or 0))
                 if r.get("kind") not in best or key > best[r.get("kind")][0]:
                     best[r.get("kind")] = (key, r)
+        # A window that has reset and that no session has opened again yet
+        # really is unused: 0 %, reset time unknown.
+        for kind in expired - set(best):
+            best[kind] = (None, {"kind": kind, "percentUsed": 0, "resetsAt": None})
         return [r for _, r in best.values()] or None
 
 
