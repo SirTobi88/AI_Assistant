@@ -132,6 +132,9 @@ class ModRegistry:
             s.rate_limits, s.rate_ts = body["rate_limits"], now
         if body.get("prompted") is True:
             s.prompt_ts = now
+        elif isinstance(body.get("prompted_at"), (int, float)) and not s.prompt_ts:
+            # the mod's own record (ms), for a bridge that started after the prompt
+            s.prompt_ts = body["prompted_at"] / 1000
 
     def take_new_focus(self) -> str | None:
         """The session a prompt was typed in since the last call, if any: the
@@ -228,7 +231,9 @@ def usage_payload(rate_limits: list, now: float | None = None) -> dict | None:
     now = time.time() if now is None else now
     by_kind = {r.get("kind"): r for r in rate_limits if isinstance(r, dict)}
     five, week = by_kind.get("five_hour"), by_kind.get("seven_day")
-    if not five and not week:
+    # No current 5-hour window yet (sessions just started): show nothing
+    # rather than 0 %.
+    if not five:
         return None
 
     def mins(r):

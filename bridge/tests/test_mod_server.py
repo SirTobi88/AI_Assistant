@@ -213,6 +213,7 @@ def test_usage_payload_from_rate_limits():
     assert (p["s"], p["w"], p["st"], p["ok"]) == (17.0, 42.0, "allowed", True)
     assert p["sr"] == round((1_800_001_800 - now) / 60) and p["sr"] == 30
     assert ms.usage_payload([], now=now) is None
+    assert ms.usage_payload([rl[1]], now=now) is None      # no 5-hour window yet: nothing, not 0 %
     assert ms.usage_payload([{"kind": "five_hour", "percentUsed": 100, "resetsAt": "x"}], now)["st"] == "limited"
 
 
@@ -249,3 +250,8 @@ def test_knob_follows_the_session_last_typed_in():
     assert reg.take_new_focus() is None
     reg.report({"sid": "a", "prompted": True})
     assert reg.take_new_focus() == "a"
+    # after a bridge restart the heartbeats still say where the last prompt was
+    fresh = ms.ModRegistry(log=lambda m: None)
+    fresh.report({"sid": "a", "prompted_at": 1_000_000})
+    fresh.report({"sid": "b", "prompted_at": 2_000_000})
+    assert fresh.take_new_focus() == "b"

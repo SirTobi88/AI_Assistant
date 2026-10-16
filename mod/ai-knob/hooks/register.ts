@@ -29,6 +29,7 @@ let effort = ''
 let fast = false
 let title = ''
 let alive = false
+let promptedAt = 0   // ms, last prompt typed in this session
 let bridgeUp = false
 
 async function socketPath($: EngineInterface): Promise<string> {
@@ -67,7 +68,7 @@ async function report($: EngineInterface, prompted = false): Promise<void> {
   try {
     const usage: any = await $.session.usage().catch(() => ({}))
     await call($, 'POST', '/v1/state', {
-      sid, state, mode, effort, fast, title, prompted,
+      sid, state, mode, effort, fast, title, prompted, prompted_at: promptedAt,
       model: await $.session.model(),
       cwd: await $.session.cwd(),
       ctx_pct: usage.context?.percent ?? -1,
@@ -212,6 +213,7 @@ export const register: Register = on => {
     mode = String(e.permission_mode ?? mode)
     effort = String((e as any).effort ?? effort)
     title = String((e as any).session_title ?? title)
+    promptedAt = await $.clock.now()
     void report($, true)   // typed here: the knob follows this session
     return next(e)
   })
