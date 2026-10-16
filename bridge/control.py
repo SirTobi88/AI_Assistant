@@ -211,7 +211,12 @@ def applescript(plan: Plan) -> str:
     else:
         raise Unsupported("no focus target")
     if plan.keys:
-        lines += ["delay 0.25", f'tell application "System Events" to tell process {_q(proc)}']
+        if plan.activate:
+            lines += ["delay 0.25", f'tell application "System Events" to tell process {_q(proc)}']
+        else:
+            # An open app menu tracks the global key stream only: keys sent
+            # to the process (tell process) never reach it.
+            lines += ["delay 0.1", 'tell application "System Events"']
         for k in plan.keys:
             if k[0] == "text":
                 lines.append(f"  keystroke {_q(k[1])}")
