@@ -45,6 +45,8 @@ DESKTOP_EFFORTS = EFFORTS
 DESKTOP_MODES = ("auto", "default", "acceptEdits", "plan")
 
 KEY_ESC, KEY_RETURN, KEY_TAB = 53, 36, 48
+# Number-row keys 1–9 (same on US and German layouts).
+DIGIT_KEYCODES = {1: 18, 2: 19, 3: 20, 4: 21, 5: 23, 6: 22, 7: 26, 8: 28, 9: 25}
 
 
 class Unsupported(Exception):
@@ -103,7 +105,9 @@ def _menu(letter: str, items: tuple, value: str) -> list:
     idx = items.index(value) + 1
     if idx > 9:
         raise Unsupported("menu item beyond 9")
-    return [("char", letter, ("command", "shift")), ("delay", 0.3), ("char", str(idx), ())]
+    # The open menu ignores a typed character ("keystroke"); the physical key
+    # (key code) selects, as a test against the app showed.
+    return [("char", letter, ("command", "shift")), ("delay", 0.6), ("code", DIGIT_KEYCODES[idx], ())]
 
 
 def plan_set(target: Target, key: str, value, current: dict, cfg: dict | None = None) -> Plan:
@@ -350,12 +354,6 @@ class ModAdapter:
             return self._fallback("set", session, key, value)
         if key == "mode":
             desktop = self.registry.sessions[session.sid].entrypoint == "claude-desktop"
-            if desktop and value == "plan":
-                # /plan in the session itself; close the app menu the knob opened.
-                if self.fallback is not None and hasattr(self.fallback, "menu"):
-                    self.fallback.menu(session, "mode", False)
-                self.log(f"control: mode=plan for {session.label} ({session.sid[:8]}) via /plan in the session")
-                return self.registry.queue(session.sid, {"t": "set", "key": "mode", "value": "plan"})
             # Keystrokes when enabled: the app's own tool refuses a call from
             # the mod in auto mode (docs/mod-api-findings.md).
             if self.fallback is not None or not desktop:

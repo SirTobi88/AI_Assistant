@@ -191,12 +191,6 @@ def test_desktop_mode_goes_to_the_mod():
     # with keystrokes enabled they win: the app refuses the mod's call in auto mode
     assert control.ModAdapter(reg, Keys(), log=lambda m: None).set(protocol.Session("d", "x"), "mode", "auto")
     assert calls == [("d", "mode", "auto")]
-    # ...except plan: /plan in the session, after closing the app menu
-    closed = []
-    Keys.menu = lambda self, s, k, o: closed.append((k, o)) or True
-    assert control.ModAdapter(reg, Keys(), log=lambda m: None).set(protocol.Session("d", "x"), "mode", "plan")
-    assert reg.sessions["d"].commands[-1] == {"t": "set", "key": "mode", "value": "plan"}
-    assert closed == [("mode", False)] and calls == [("d", "mode", "auto")]
 
 
 def test_stale_sessions_are_dropped():

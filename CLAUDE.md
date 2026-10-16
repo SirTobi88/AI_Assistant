@@ -55,3 +55,8 @@
   per `on('http.fetch'|'session.id'|…)` mit `{ value }` beantworten, `tool.call` mit `{ result }`).
   Validator: Ereignisname als Literal, Hook als Funktionsliteral, `$` nur an oben deklarierte
   Funktionen. Gemessene API-Fakten: `docs/mod-api-findings.md`. Installation: `tools/install_mod.sh`.
+- Modus vom Knob (Desktop): nur über das Menü der App (`control = keys`): Knob öffnet die
+  Modus-Auswahl → Bridge drückt Cmd+Shift+M, Wahl → Ziffer als **Tastencode** (`key code 18–21`,
+  ein getipptes Zeichen wirkt im Menü nicht), zurück → Esc. Reihenfolge laut App: Auto, Manual,
+  Accept edits, Plan. `bypassPermissions` setzt der Knob nie. Der Knob folgt der Session mit dem
+  letzten Prompt (Mod meldet `prompted`/`prompted_at`).

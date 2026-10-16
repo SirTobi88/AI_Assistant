@@ -44,14 +44,14 @@ def test_desktop_uses_menus_not_text():
     plan = c.plan_set(DESK, "effort", "high", {})
     assert plan.focus == ("desktop",)
     assert plan.keys[0] == ("char", "e", ("command", "shift"))
-    assert plan.keys[-1] == ("char", "3", ())
+    assert plan.keys[-1] == ("code", 20, ())
     assert not any(k[0] == "text" for k in plan.keys)
-    assert c.plan_set(DESK, "mode", "plan", {}).keys[-1] == ("char", "4", ())
+    assert c.plan_set(DESK, "mode", "plan", {}).keys[-1] == ("code", 21, ())
 
 
 def test_desktop_menu_order_from_config():
     cfg = {"desktop_models": "default, opus, sonnet, haiku"}
-    assert c.plan_set(DESK, "model", "sonnet", {}, cfg).keys[-1] == ("char", "3", ())
+    assert c.plan_set(DESK, "model", "sonnet", {}, cfg).keys[-1] == ("code", 20, ())
     with pytest.raises(c.Unsupported):
         c.plan_set(DESK, "model", "fable", {}, cfg)
 
@@ -92,7 +92,7 @@ def test_adapter_runs_script_and_reports():
     scripts, logs = [], []
     a = c.KeystrokeAdapter(log=logs.append, run=scripts.append, cfg={})
     s = protocol.Session("s", "web", entrypoint="claude-desktop", mode="default")
-    assert a.set(s, "mode", "plan") is True and "key code" not in scripts[0]
+    assert a.set(s, "mode", "plan") is True and "key code 21" in scripts[0]
     assert a.set(s, "fast", True) is False and "fast mode" in logs[-1]
 
     def refuse(_):
@@ -114,9 +114,9 @@ def test_desktop_never_selects_bypass_permissions():
 
 
 def test_desktop_mode_digits_follow_the_app_menu():
-    assert c.plan_set(DESK, "mode", "auto", {}).keys[-1] == ("char", "1", ())
-    assert c.plan_set(DESK, "mode", "default", {}).keys[-1] == ("char", "2", ())
-    assert c.plan_set(DESK, "mode", "plan", {}).keys[-1] == ("char", "4", ())
+    assert c.plan_set(DESK, "mode", "auto", {}).keys[-1] == ("code", 18, ())
+    assert c.plan_set(DESK, "mode", "default", {}).keys[-1] == ("code", 19, ())
+    assert c.plan_set(DESK, "mode", "plan", {}).keys[-1] == ("code", 21, ())
 
 
 def test_desktop_mode_menu_opens_on_the_knob_and_then_takes_only_the_digit():
@@ -126,7 +126,7 @@ def test_desktop_mode_menu_opens_on_the_knob_and_then_takes_only_the_digit():
     assert a.menu(s, "mode", True)
     assert 'keystroke "m" using {command down, shift down}' in sent[-1]
     assert a.set(s, "mode", "plan")
-    assert 'keystroke "m"' not in sent[-1] and 'keystroke "4"' in sent[-1]
+    assert 'keystroke "m"' not in sent[-1] and "key code 21" in sent[-1]
     # activating the app would close the open menu before the digit arrives
     assert "activate" not in sent[-1]
     assert "tell process" not in sent[-1]

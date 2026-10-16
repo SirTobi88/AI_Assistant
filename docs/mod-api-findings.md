@@ -33,6 +33,9 @@ Session der Desktop-App. Typen: `plugin-authoring/types/claude-code.d.ts` des Bu
 | Modell-Auswahl der Desktop-App | bleibt nach `/model` auf dem alten Modell stehen (nur Anzeige); `set_session_model` der App lehnt die eigene Session ab |
 | Modus vom Knob → `$.mcp.call('ccd_session_mgmt', 'set_session_permission_mode', {session_id:'self'})` (2026-10-16, echte Hardware) | im Auto-Modus abgelehnt: „auto mode classifier gave no verdict … the request that produced this action did not ask for one“. Aufruf aus dem Mod hat keine auslösende Anfrage; kein Umgehen per Wiederholung. In anderen Modi ungetestet |
 
+| `$.command.run({command:'plan'})` in der Desktop-Session (2.1.299) | „no command named /plan in this session“ |
+| Modus-Menü der App per Tastendruck (Cmd+Shift+M, dann Ziffer) | `keystroke "4"` wählt im offenen Menü nichts, `key code 21` (physische Taste) wählt den Eintrag. Die Bridge schickt Ziffern daher als Tastencode |
+
 ## Folgerungen
 - Status, Kontext, Limits, Modell/Effort/Fast, Stopp und Prompts: direkt im Mod.
 - **Modus der laufenden Session**: kein direkter Weg. Möglich sind `setMode` (Ziel `session`) als Teil

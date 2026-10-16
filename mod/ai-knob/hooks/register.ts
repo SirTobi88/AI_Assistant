@@ -95,9 +95,6 @@ async function runCommand($: EngineInterface, cmd: any): Promise<void> {
     } else if (cmd.t === 'set' && cmd.key === 'effort') {
       await $.command.run({ command: 'effort', args: String(cmd.value) })
       effort = String(cmd.value)
-    } else if (cmd.t === 'set' && cmd.key === 'mode' && cmd.value === 'plan') {
-      await $.command.run({ command: 'plan', args: '' })
-      mode = 'plan'
     } else if (cmd.t === 'set' && cmd.key === 'mode') {
       // Desktop app only (the bridge sends it nowhere else): the app's own
       // session tool, which shows its approval card before a mode that does
