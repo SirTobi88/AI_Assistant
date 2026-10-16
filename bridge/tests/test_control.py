@@ -127,6 +127,8 @@ def test_desktop_mode_menu_opens_on_the_knob_and_then_takes_only_the_digit():
     assert 'keystroke "m" using {command down, shift down}' in sent[-1]
     assert a.set(s, "mode", "plan")
     assert 'keystroke "m"' not in sent[-1] and 'keystroke "4"' in sent[-1]
+    # activating the app would close the open menu before the digit arrives
+    assert "activate" not in sent[-1]
     # the choice closed the menu: leaving the picker now presses nothing
     n = len(sent)
     assert a.menu(s, "mode", False) and len(sent) == n

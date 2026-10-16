@@ -62,6 +62,7 @@ class Plan:
     """What to do, as data (tested without touching the machine)."""
     focus: tuple = ()                         # ("terminal", tty) | ("desktop",)
     keys: list = field(default_factory=list)  # ("text", s) | ("code", n, mods) | ("char", c, mods)
+    activate: bool = True                     # False: an open app menu would close
 
 
 def valid_model(v: str) -> bool:
@@ -139,8 +140,11 @@ def plan_set(target: Target, key: str, value, current: dict, cfg: dict | None = 
             if value == "bypassPermissions":
                 raise Unsupported("bypassPermissions is not set from the knob")
             keys = _menu("m", _order(cfg, "desktop_modes", DESKTOP_MODES), str(value))
-            # The knob opened the menu already (plan_menu): only the digit is left.
-            return Plan(focus, keys[-1:] if current.get("menu_open") else keys)
+            # The knob opened the menu already (plan_menu): only the digit is
+            # left, and activating the app first would close that menu.
+            if current.get("menu_open"):
+                return Plan(focus, keys[-1:], activate=False)
+            return Plan(focus, keys)
         if key == "fast":
             raise Unsupported("the desktop app has no shortcut for fast mode")
     raise Unsupported(f"{key} for {target.kind}")
@@ -151,8 +155,9 @@ def plan_menu(target: Target, key: str, open_: bool) -> Plan:
     (Cmd+Shift+M), close it with Esc when the knob leaves without a choice."""
     if target.kind != "desktop" or key != "mode":
         raise Unsupported(f"no {key} menu for {target.kind}")
-    keys = [("char", "m", ("command", "shift"))] if open_ else [("code", KEY_ESC, ())]
-    return Plan(("desktop",), keys)
+    if open_:
+        return Plan(("desktop",), [("char", "m", ("command", "shift"))])
+    return Plan(("desktop",), [("code", KEY_ESC, ())], activate=False)
 
 
 def plan_interrupt(target: Target) -> Plan:
@@ -200,7 +205,8 @@ def applescript(plan: Plan) -> str:
         ]
         proc = "Terminal"
     elif plan.focus == ("desktop",):
-        lines += ['tell application "Claude" to activate']
+        if plan.activate:
+            lines += ['tell application "Claude" to activate']
         proc = "Claude"
     else:
         raise Unsupported("no focus target")
