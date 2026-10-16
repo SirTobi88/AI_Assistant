@@ -11,6 +11,7 @@ except ImportError:  # run as a script
 
 RX_CHAR_UUID = "41494b6e-6f62-4272-6964-676500000002"
 TX_CHAR_UUID = "41494b6e-6f62-4272-6964-676500000003"
+AUDIO_CHAR_UUID = "41494b6e-6f62-4272-6964-676500000005"
 
 
 class KnobLink:
@@ -19,9 +20,11 @@ class KnobLink:
     framed message would make the knob drop that message."""
 
     def __init__(self, client, on_command: Callable[[protocol.Command], None],
-                 log: Callable[[str], None] = print) -> None:
+                 log: Callable[[str], None] = print,
+                 on_audio: Callable[[bytes], None] | None = None) -> None:
         self.client = client
         self.on_command = on_command
+        self.on_audio = on_audio
         self.log = log
         self.lock = asyncio.Lock()
         self._rx = protocol.Reassembler()
@@ -38,10 +41,21 @@ class KnobLink:
             # Bounded like the refresh subscription: CoreBluetooth may never
             # confirm the CCCD write on a half-open link.
             await asyncio.wait_for(self.client.start_notify(TX_CHAR_UUID, self._on_notify), timeout=10)
-            return True
         except Exception as e:  # BleakError, ValueError, TimeoutError
             self.log(f"Command channel unavailable: {e!r}")
             return False
+        if self.on_audio is not None:
+            try:
+                await asyncio.wait_for(self.client.start_notify(AUDIO_CHAR_UUID, self._on_audio), timeout=10)
+            except Exception as e:  # older firmware without the AUDIO characteristic
+                self.log(f"Voice channel unavailable: {e!r}")
+        return True
+
+    def _on_audio(self, _char, data: bytearray) -> None:
+        if self._loop is not None:
+            self._loop.call_soon_threadsafe(self.on_audio, bytes(data))
+        else:
+            self.on_audio(bytes(data))
 
     def _on_notify(self, _char, data: bytearray) -> None:
         msg = self._rx.feed(bytes(data))

@@ -25,7 +25,7 @@ from bleak import BleakClient
 from bleak.exc import BleakError
 
 try:
-    from . import knob_activity, codex_limits, control, mod_server, monitor, sessions, virtual_knob
+    from . import knob_activity, codex_limits, control, mod_server, monitor, sessions, virtual_knob, voice
     from .hub import Hub
     from .link import KnobLink
 except ImportError:  # run as a script, not as the daemon package
@@ -36,6 +36,7 @@ except ImportError:  # run as a script, not as the daemon package
     import monitor
     import sessions
     import virtual_knob
+    import voice
     from hub import Hub
     from link import KnobLink
 
@@ -918,7 +919,7 @@ async def run_session(client, stop_event: asyncio.Event) -> bool:
     session = Session(client)
     await session.setup_refresh_subscription()
     if HUB is not None:
-        link = KnobLink(client, HUB.on_command, log)
+        link = KnobLink(client, HUB.on_command, log, on_audio=HUB.on_audio)
         if await link.start():
             session.lock = link.lock
             await HUB.attach(link)
@@ -1071,6 +1072,9 @@ async def main() -> None:
     global HUB
     HUB = Hub(adapter=control.adapter_from_config(log, registry=MODS), log=log,
               **({"socket_path": HUB_SOCKET} if HUB_SOCKET else {}))
+    HUB.voice_cfg = control.read_config()
+    cli = voice.whisper_cli(HUB.voice_cfg)
+    log(f"Voice: {'whisper-cli at ' + cli if cli else 'no whisper-cli (brew install whisper-cpp)'}")
     await HUB.start()
     mods = mod_server.ModServer(HUB, MODS, MOD_SOCKET or mod_server.DEFAULT_SOCKET, log)
     await mods.start()

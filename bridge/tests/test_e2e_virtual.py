@@ -90,3 +90,37 @@ def test_double_tap_leaves_prompt_unanswered_until_timeout():
     req = {**PUSH, "timeout": 4}
     choices, _ = _run("4000:t,4150:t", req, ask_at=0.3)
     assert choices is None
+
+
+@pytest.mark.skipif(not __import__("shutil").which("say"), reason="needs macOS say")
+def test_push_to_talk_reaches_whisper_and_comes_back_to_the_knob():
+    from bridge import voice
+    if not (voice.whisper_cli() and voice.DEFAULT_MODEL.exists()):
+        pytest.skip("needs whisper-cli and the model")
+    d = Path(tempfile.mkdtemp(prefix="knob", dir="/tmp"))
+    hub_sock, knob_sock, wav = d / "hub.sock", d / "knob.sock", d / "mic.wav"
+    subprocess.run(["say", "-v", "Anna", "-o", str(wav), "--data-format=LEI16@16000",
+                    "Zeig mir den Status"], check=True)
+    bridge = subprocess.Popen(
+        [sys.executable, "-m", "bridge.claude_usage_daemon", "--virtual", str(knob_sock),
+         "--no-usage", "--hub-socket", str(hub_sock), "--mod-socket", str(d / "mod.sock")],
+        cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    sim = None
+    try:
+        _wait_for(knob_sock)
+        # one detent opens the menu, hold 3 s records, the transcript then shows up
+        env = {**os.environ, "SDL_VIDEODRIVER": "dummy", "SIM_BRIDGE": str(knob_sock),
+               "SIM_MIC_WAV": str(wav), "SIM_INPUT": "2500:d,3500:h3000",
+               "SIM_AUTOSHOT_MS": "14000", "SIM_AUTOSHOT_PATH": "/dev/null"}
+        sim = subprocess.Popen(["script", "-q", "/dev/null", str(SIM)], cwd=ROOT / "firmware", env=env,
+                               stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                               text=True)
+        out = sim.communicate(timeout=30)[0]
+    finally:
+        if sim and sim.poll() is None:
+            sim.kill()
+        bridge.terminate()
+        bridge_out, _ = bridge.communicate(timeout=10)
+    assert '"t":"ptt","on":1' in out and '"t":"ptt","on":0' in out, out
+    heard = [l for l in bridge_out.splitlines() if "Voice:" in l and "->" in l]
+    assert heard and "status" in heard[-1].lower(), bridge_out

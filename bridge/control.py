@@ -378,6 +378,14 @@ class ModAdapter:
         return self.registry.queue(session.sid, {"t": "set", "key": key,
                                                  "value": bool(value) if key == "fast" else value})
 
+    def prompt(self, session, text: str) -> bool:
+        """A transcript from the knob's push-to-talk, as a prompt in the session."""
+        if not self.registry.has(session.sid):
+            self.log(f"control: voice prompt for {session.label} not possible (no mod for it)")
+            return False
+        self.log(f"control: voice prompt for {session.label} ({len(text)} chars)")
+        return self.registry.queue(session.sid, {"t": "prompt", "text": text})
+
     def menu(self, session, key: str, open_: bool) -> bool:
         # Only the keystroke path has a menu to show.
         return self.fallback.menu(session, key, open_) if self.fallback is not None else False

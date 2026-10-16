@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include <stddef.h>
 
 enum ble_state_t {
     BLE_STATE_INIT,
@@ -35,6 +36,8 @@ bool ble_take_tx_subscribed(void);
 // Device -> host command (docs/protocol.md), notified on the TX characteristic.
 // Framed automatically when longer than one packet. No-op while disconnected.
 void ble_send_cmd(const char* json);
+// Device -> host voice frame (src/voice.h), notified on the AUDIO characteristic.
+void ble_send_audio(const uint8_t* data, size_t len);
 
 void ble_set_battery_level(int pct);
 

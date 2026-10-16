@@ -17,10 +17,11 @@ from pathlib import Path
 from typing import Protocol as _Protocol
 
 try:
-    from . import protocol
+    from . import protocol, voice
     from .knob_hook import SOCKET_PATH
 except ImportError:  # run as a script
     import protocol
+    import voice
     from knob_hook import SOCKET_PATH
 
 DEFAULT_MODELS = ["fable", "opus", "sonnet", "haiku"]
@@ -53,6 +54,10 @@ class LoggingAdapter:
         self.log(f"control off: would interrupt {session.label}")
         return False
 
+    def prompt(self, session, text: str) -> bool:
+        self.log(f"control off: would send {text!r} to {session.label}")
+        return False
+
 
 class Hub:
     def __init__(self, adapter: Adapter | None = None, log=print,
@@ -69,6 +74,11 @@ class Hub:
         self._ids = itertools.count(1)
         self._server: asyncio.AbstractServer | None = None
         self._last_sessions_msg: dict | None = None
+        # push-to-talk: the take being recorded, transcripts waiting on the knob
+        self.voice_cfg: dict = {}
+        self._take: voice.Take | None = None
+        self._stt: dict[str, str] = {}
+        self._stt_ids = itertools.count(1)
 
     # ---- lifecycle
 
@@ -200,7 +210,52 @@ class Hub:
         if cmd.t == "hello":
             self.log(f"Knob says hello: protocol {a.get('v')}, firmware {a.get('fw')}")
             return
+        if cmd.t == "ptt":
+            if a["on"]:
+                self._take = voice.Take()
+            elif self._take is not None:
+                asyncio.ensure_future(self._finish_take(self._take))
+            return
+        if cmd.t == "stt_send":
+            text = self._stt.pop(a["id"], None)
+            target = next((s for s in self.sessions if s.sid == self.active), None)
+            prompt = getattr(self.adapter, "prompt", None)
+            if text and target is not None and prompt is not None:
+                prompt(target, text)
+            elif text:
+                self.log("Voice: no session to send the text to")
+            return
+        if cmd.t == "stt_drop":
+            self._stt.pop(a["id"], None)
+            return
         self.log(f"Knob command {cmd.t} {a} (not handled yet)")
+
+    # ---- push-to-talk
+
+    def on_audio(self, frame: bytes) -> None:
+        if self._take is not None:
+            self._take.feed(frame)
+
+    async def _finish_take(self, take: voice.Take) -> None:
+        await asyncio.sleep(0.3)            # frames still on their way after "ptt off"
+        if self._take is take:
+            self._take = None
+        samples = take.samples()
+        t0 = time.monotonic()
+        try:
+            text = await asyncio.get_running_loop().run_in_executor(
+                None, voice.transcribe, samples, self.voice_cfg)
+        except Exception as e:  # whisper failed, timed out, missing
+            self.log(f"Voice: transcription failed: {e}")
+            text = ""
+        self.log(f"Voice: {len(samples) / voice.SAMPLE_RATE:.1f} s -> {text!r} "
+                 f"({time.monotonic() - t0:.1f} s)")
+        stt_id = f"v{next(self._stt_ids)}"
+        if text:
+            self._stt = {stt_id: text}     # only the newest take can be sent
+            await self._send(protocol.stt_msg(stt_id, text, True))
+        else:
+            await self._send(protocol.stt_msg(stt_id, "(nichts verstanden)", True))
 
     async def ask_request(self, req: dict) -> list[int] | None:
         """A prompt as knob_hook.py / the mod endpoint describe it -> the knob's choices."""

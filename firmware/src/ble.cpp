@@ -21,6 +21,7 @@
 #define RX_CHAR_UUID        "41494b6e-6f62-4272-6964-676500000002"  // host writes here
 #define TX_CHAR_UUID        "41494b6e-6f62-4272-6964-676500000003"  // device ack/nack notifies
 #define REQ_CHAR_UUID       "41494b6e-6f62-4272-6964-676500000004"  // device-initiated refresh request
+#define AUDIO_CHAR_UUID     "41494b6e-6f62-4272-6964-676500000005"  // push-to-talk voice frames
 
 // Notify payload per TX packet. macOS settles on an ATT MTU of 185, so 180
 // leaves room; longer commands go out 0x01-framed like host messages.
@@ -73,6 +74,7 @@ static NimBLECharacteristic* input_kbd = nullptr;
 static NimBLECharacteristic* tx_char = nullptr;
 static NimBLECharacteristic* rx_char = nullptr;
 static NimBLECharacteristic* req_char = nullptr;
+static NimBLECharacteristic* audio_char = nullptr;
 
 static ble_state_t state = BLE_STATE_INIT;
 static uint32_t    auth_fail_ms = 0;   // millis() of the last un-bonded handshake, 0 = none
@@ -419,6 +421,8 @@ void ble_init(void) {
     static ReqCallbacks reqCb;
     req_char->setCallbacks(&reqCb);
 
+    audio_char = svc->createCharacteristic(AUDIO_CHAR_UUID, NIMBLE_PROPERTY::NOTIFY);
+
     svc->start();
     server->start();
     configure_advertising();   // once — see the comment on that function
@@ -533,6 +537,12 @@ void ble_send_cmd(const char* json) {
         tx_char->setValue(pkt, n + 4);
         tx_char->notify();
     }
+}
+
+void ble_send_audio(const uint8_t* data, size_t len) {
+    if (state != BLE_STATE_CONNECTED || !audio_char) return;
+    audio_char->setValue(data, len);
+    audio_char->notify();
 }
 
 void ble_send_ack(void) {

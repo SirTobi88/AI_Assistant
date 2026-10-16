@@ -64,3 +64,10 @@
   Fable, Haiku), damit auch die Auswahl unter dem Eingabefeld wechselt; `/model` aus dem Mod ändert
   nur die Engine. CLI und Tastenkürzel aus: weiter `/model` im Mod. Tasten an die Desktop-App gehen
   immer über den globalen Tastenstrom (nicht `tell process`).
+- Spracheingabe: Halten am Knob (im Menü) nimmt über das PDM-Mikro auf (GPIO 45/46, I2S0,
+  `boards/waveshare_knob_18/mic.cpp`), `voice.cpp` packt IMA-ADPCM-Rahmen (`adpcm.c`) aufs
+  AUDIO-Merkmal `…0005`. Bridge: `bridge/voice.py` (Decoder, `Take`, whisper.cpp `whisper-cli`
+  mit `~/.config/ai-knob/models/ggml-large-v3-turbo-q5_0.bin`, Konfig `whisper_cli`,
+  `whisper_model`, `whisper_lang`). Sim: `SIM_MIC_WAV=<16-kHz-WAV>` statt Mikro, Kanal `A` im
+  virtuellen Knob. Test-Stimme: `say -v Anna -o x.wav --data-format=LEI16@16000 "…"`.
+  Halten drückt keine HID-Leertaste mehr (tippte in der Desktop-App Leerzeichen).

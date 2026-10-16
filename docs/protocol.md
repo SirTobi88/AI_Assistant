@@ -103,11 +103,18 @@ Mehrere offene Prompts stehen in einer Warteschlange; der Knob zeigt den ältest
 | Transkript senden/verwerfen | `{"t":"stt_send","id":"v3"}` / `{"t":"stt_drop","id":"v3"}` |
 | Hallo (nach Verbindung) | `{"t":"hello","v":1,"fw":"0.1.0"}` |
 
-## AUDIO (Phase 6)
+## AUDIO (Push-to-talk)
 
-Notify-Rahmen: `[seq u16 LE][IMA-ADPCM 4 bit, 16 kHz mono]`. Erster Rahmen nach `ptt on`
-beginnt mit `seq = 0` und trägt im Kopf zusätzlich `predictor i16, index u8`.
-~64 kbit/s, passt in BLE 2M PHY mit großer MTU.
+Merkmal `…0005` (Notify). Rahmen: `[seq u16 LE][predictor i16 LE][index u8]` + 128 Byte
+IMA-ADPCM (4 bit, niedriges Nibble zuerst) = 256 Samples, 16 kHz mono, 16 ms. Jeder Rahmen trägt den
+Decoder-Zustand, ein verlorener Rahmen kostet nur 16 ms (Stille). `seq` beginnt bei jedem `ptt on`
+mit 0; höchstens 30 s pro Aufnahme (dann `ptt off` vom Knob). ~66 kbit/s.
+
+Ablauf: Halten → `{"t":"ptt","on":1}` + Rahmen → Loslassen `{"t":"ptt","on":0}` → Bridge
+(`bridge/voice.py`) wartet 0,3 s auf Nachzügler, transkribiert lokal mit whisper.cpp →
+`{"t":"stt","id":"v3","tx":"…","fin":1}` → Knob zeigt den Text → `stt_send` schickt ihn als Prompt
+an die aktive Session (Mod: `$.prompt.submit`), `stt_drop` verwirft. Nichts erkannt:
+`tx` = „(nichts verstanden)“, nicht sendbar.
 
 ## Mod-Endpunkt (Claude-Code-Mod ⇄ Bridge)
 

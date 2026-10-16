@@ -10,6 +10,7 @@ Packet on the stream: channel (1 byte) + length (u16 little endian) + bytes.
     R  bridge -> knob   a write to RX (…0002)
     T  knob -> bridge   a notify on TX (…0003)
     Q  knob -> bridge   a notify on REQ (…0004)
+    A  knob -> bridge   a notify on AUDIO (…0005), push-to-talk frames
 """
 from __future__ import annotations
 
@@ -22,7 +23,7 @@ from typing import Awaitable, Callable
 DEFAULT_SOCKET = Path.home() / ".config" / "ai-knob" / "knob.sock"
 MTU = 185                       # what macOS negotiates with the real board
 
-_CHANNELS = {"0002": b"R", "0003": b"T", "0004": b"Q"}
+_CHANNELS = {"0002": b"R", "0003": b"T", "0004": b"Q", "0005": b"A"}
 
 
 def _channel(uuid: str) -> bytes:

@@ -230,6 +230,10 @@ void ble_send_nack(void) {
 }
 bool ble_take_tx_subscribed(void) { return false; }
 
+void ble_send_audio(const uint8_t* data, size_t len) {
+    if (bridge_path) bridge_packet('A', data, len);
+}
+
 void ble_request_refresh(void) {
     const uint8_t req = 0x01;
     if (bridge_path) bridge_packet('Q', &req, 1);

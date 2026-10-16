@@ -1,6 +1,7 @@
 #include "app.h"
 #include "ringmenu.h"
 #include "proto.h"
+#include "voice.h"
 #include "ble.h"
 #include "brightness.h"
 #include "idle.h"
@@ -478,14 +479,22 @@ static void activate(bool confirmed) {
 
 // ---------------------------------------------------------------- gestures
 
+// Push-to-talk: the knob records and streams to the bridge, which transcribes
+// with Whisper and sends the text back for a look (V_STT) before it becomes a
+// prompt. No HID Space any more: in the desktop app it would type spaces.
 static void ptt(bool on) {
     if (on == ptt_on) return;
+    if (on && !connected) { show_hint("nicht verbunden"); return; }
+    if (on && !voice_start()) { show_hint("kein Mikrofon"); return; }
     ptt_on = on;
-    if (on) ble_keyboard_press(0x2C, 0);   // HID Space: Claude Code voice mode, as on the home screens
-    else    ble_keyboard_release();
+    if (!on) voice_stop();
     proto_send_ptt(on);
-    ring_set_title(ring, on ? "Aufnahme ..." : (connected ? "Claude" : "nicht verbunden"));
-    if (!on && view != V_CLOSED) build(view, ring_focus(ring));
+    if (on) {
+        ring_set_title(ring, "Aufnahme ...");
+    } else if (view != V_CLOSED) {
+        build(view, ring_focus(ring));
+        show_hint("transkribiere ...");
+    }
 }
 
 static void tap_timer_cb(lv_timer_t*) {
@@ -629,6 +638,7 @@ void app_set_connected(bool c) {
 }
 
 void app_tick(void) {
+    if (ptt_on && !voice_tick()) ptt(false);   // the take hit its 30 s
     if (view == V_CLOSED) return;
     const uint32_t now = millis();
     if (hint_until && (int32_t)(now - hint_until) >= 0) {
