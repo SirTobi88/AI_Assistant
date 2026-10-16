@@ -40,7 +40,9 @@ CLI_MODE_CYCLE = ("default", "acceptEdits", "plan", "auto")
 # desktop_modes = comma-separated, in menu order).
 DESKTOP_MODELS = ("default", "fable", "opus", "sonnet", "haiku")
 DESKTOP_EFFORTS = EFFORTS
-DESKTOP_MODES = ("default", "acceptEdits", "plan", "auto", "bypassPermissions")
+# Checked in the app (2026-10-16): Auto, Manual, Accept edits, Plan; bypass
+# permissions is a separate switch, not an item.
+DESKTOP_MODES = ("auto", "default", "acceptEdits", "plan")
 
 KEY_ESC, KEY_RETURN, KEY_TAB = 53, 36, 48
 

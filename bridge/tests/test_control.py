@@ -111,3 +111,9 @@ def test_control_is_off_unless_configured(tmp_path, monkeypatch):
 def test_desktop_never_selects_bypass_permissions():
     with pytest.raises(c.Unsupported):
         c.plan_set(DESK, "mode", "bypassPermissions", {})
+
+
+def test_desktop_mode_digits_follow_the_app_menu():
+    assert c.plan_set(DESK, "mode", "auto", {}).keys[-1] == ("char", "1", ())
+    assert c.plan_set(DESK, "mode", "default", {}).keys[-1] == ("char", "2", ())
+    assert c.plan_set(DESK, "mode", "plan", {}).keys[-1] == ("char", "4", ())
