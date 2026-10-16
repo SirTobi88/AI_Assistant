@@ -30,6 +30,8 @@ Session der Desktop-App. Typen: `plugin-authoring/types/claude-code.d.ts` des Bu
 | Modell vom Knob → `/model sonnet`, `/model opus` | „Set model to … for this session only“: in der Desktop-Session **kein** neuer Standard |
 | Fast vom Knob → `/fast on` | „Fast mode is not available in the Agent SDK“: in Desktop-Sessions nicht verfügbar, `/fast off` geht |
 | Effort `max`, `medium` | ausgeführt, jeweils nur für die Session |
+| Modell-Auswahl der Desktop-App | bleibt nach `/model` auf dem alten Modell stehen (nur Anzeige); `set_session_model` der App lehnt die eigene Session ab |
+| Modus vom Knob → `$.mcp.call('ccd_session_mgmt', 'set_session_permission_mode', {session_id:'self'})` (2026-10-16, echte Hardware) | im Auto-Modus abgelehnt: „auto mode classifier gave no verdict … the request that produced this action did not ask for one“. Aufruf aus dem Mod hat keine auslösende Anfrage; kein Umgehen per Wiederholung. In anderen Modi ungetestet |
 
 ## Folgerungen
 - Status, Kontext, Limits, Modell/Effort/Fast, Stopp und Prompts: direkt im Mod.
