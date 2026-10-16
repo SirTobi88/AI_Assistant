@@ -233,7 +233,7 @@ def test_rate_limits_merge_to_the_current_window():
     got = {r["kind"]: r["percentUsed"] for r in reg.rate_limits(now=now)}
     assert got == {"five_hour": 67, "seven_day": 71}
     reg.sessions["b"].rate_limits = []
-    reg.sessions["a"].rate_limits = []
+    reg.sessions["a"].rate_limits = reg.sessions["e"].rate_limits = []
     assert reg.rate_limits(now=now) is None
 
 
