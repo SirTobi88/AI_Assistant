@@ -36,6 +36,9 @@ Session der Desktop-App. Typen: `plugin-authoring/types/claude-code.d.ts` des Bu
 | `$.command.run({command:'plan'})` in der Desktop-Session (2.1.299) | „no command named /plan in this session“ |
 | Modus-Menü der App per Tastendruck (Cmd+Shift+M, dann Ziffer) | `keystroke "4"` wählt im offenen Menü nichts, `key code 21` (physische Taste) wählt den Eintrag. Die Bridge schickt Ziffern daher als Tastencode |
 
+| Freigabe (`classic.PermissionRequest`) am Knob, echte Hardware, Manual-Modus (2026-10-16) | Erlauben → Werkzeug läuft ohne Dialog; „Am Rechner“ → sofort der Dialog der App; keine Antwort → nach 30 s der Dialog der App |
+| Zugriff auf einen Ordner außerhalb der Arbeitsverzeichnisse (z. B. `rm` in `~`) | fragt die App selbst, ohne `classic.PermissionRequest`: erscheint nicht am Knob |
+
 ## Folgerungen
 - Status, Kontext, Limits, Modell/Effort/Fast, Stopp und Prompts: direkt im Mod.
 - **Modus der laufenden Session**: kein direkter Weg. Möglich sind `setMode` (Ziel `session`) als Teil
