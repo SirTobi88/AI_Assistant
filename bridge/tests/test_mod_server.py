@@ -187,10 +187,17 @@ def test_desktop_mode_goes_to_the_mod():
     a = control.ModAdapter(reg, None, log=lambda m: None)
     assert a.set(protocol.Session("d", "x"), "mode", "plan")
     assert reg.sessions["d"].commands[-1] == {"t": "set", "key": "mode", "value": "plan"}
-    assert not a.set(protocol.Session("d", "x"), "mode", "bypassPermissions")
-    # with keystrokes enabled they win: the app refuses the mod's call in auto mode
-    assert control.ModAdapter(reg, Keys(), log=lambda m: None).set(protocol.Session("d", "x"), "mode", "auto")
-    assert calls == [("d", "mode", "auto")]
+    # the knob offers plan only; auto follows when the plan is accepted
+    for other in ("auto", "default", "acceptEdits", "bypassPermissions"):
+        assert not a.set(protocol.Session("d", "x"), "mode", other)
+    # with keystrokes enabled: the app's own /plan, typed (app_set)
+    class AppKeys(Keys):
+        def app_set(self, k, v, label=""): calls.append(("app", k, v)); return True
+    k = control.ModAdapter(reg, AppKeys(), log=lambda m: None)
+    assert k.set(protocol.Session("d", "x"), "mode", "plan")
+    assert reg.sessions["d"].commands[-1] == {"t": "app_set", "key": "mode", "value": "plan"}
+    assert k.type_app("d", {"t": "app_set", "key": "mode", "value": "plan"})
+    assert calls == [("app", "mode", "plan")]
 
 
 def test_stale_sessions_are_dropped():

@@ -66,8 +66,11 @@ def test_desktop_effort_and_model_are_the_apps_typed_commands():
     for bad in ("default", "sonnet; rm -rf ~", "/clear"):
         with pytest.raises(c.Unsupported):
             c.plan_app_set("model", bad)
-    with pytest.raises(c.Unsupported):
-        c.plan_app_set("mode", "plan")
+    # the knob's only mode: the app's own /plan
+    assert c.plan_app_set("mode", "plan").keys[0] == ("text", "/plan")
+    for bad in ("auto", "default", "acceptEdits", "bypassPermissions"):
+        with pytest.raises(c.Unsupported):
+            c.plan_app_set("mode", bad)
 
 
 def test_desktop_menu_order_from_config():

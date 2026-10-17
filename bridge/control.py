@@ -189,6 +189,8 @@ def plan_app_set(key: str, value: str, cfg: dict | None = None) -> Plan:
         text = f"/effort {value}"
     elif key == "model":
         text = f"/model {app_model_id(value, cfg)}"
+    elif key == "mode" and value == "plan":
+        text = "/plan"           # the knob offers no other mode (auto follows the plan)
     else:
         raise Unsupported(f"no app command for {key}")
     return Plan(("desktop",), [("text", text), ("delay", 0.8),
@@ -421,6 +423,13 @@ class ModAdapter:
             return self._fallback("set", session, key, value)
         desktop = self.registry.sessions[session.sid].entrypoint == "claude-desktop"
         if key == "mode":
+            # The knob only offers plan mode; leaving it happens when the
+            # plan is accepted. Desktop with keystrokes: the app's own /plan.
+            if value != "plan":
+                self.log(f"control: mode={value!r} not offered from the knob")
+                return False
+            if desktop and hasattr(self.fallback, "app_set"):
+                return self.registry.queue(session.sid, {"t": "app_set", "key": "mode", "value": "plan"})
             # Keystrokes when enabled: the app's own tool refuses a call from
             # the mod in auto mode (docs/mod-api-findings.md).
             if self.fallback is not None or not desktop:
@@ -448,7 +457,7 @@ class ModAdapter:
         box emptied). Only what the bridge itself queued for that session."""
         s = self.registry.sessions.get(sid)
         key = cmd.get("key")
-        if (s is None or self.fallback is None or key not in ("effort", "model")
+        if (s is None or self.fallback is None or key not in ("effort", "model", "mode")
                 or key not in s.pending or s.pending[key] != cmd.get("value")):
             return False
         return self.fallback.app_set(key, str(cmd["value"]), s.title or sid[:8])

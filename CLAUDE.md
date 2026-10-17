@@ -59,11 +59,11 @@
   `version` in `plugin.json` erhöhen, `claude plugin marketplace update ai-knob-local` und
   `claude plugin update ai-knob@ai-knob-local --scope user`, dann `/reload-plugins`. Sprach-Prompts
   gehen mit `asUser: true` rein (sonst rahmt die Engine sie als „The ai-knob plugin sent a message“).
-- Modus vom Knob (Desktop): nur über das Menü der App (`control = keys`): Knob öffnet die
-  Modus-Auswahl → Bridge drückt Cmd+Shift+M, Wahl → Ziffer als **Tastencode** (`key code 18–21`,
-  ein getipptes Zeichen wirkt im Menü nicht), zurück → Esc. Reihenfolge laut App: Auto, Manual,
-  Accept edits, Plan. `bypassPermissions` setzt der Knob nie. Der Knob folgt der Session mit dem
-  letzten Prompt (Mod meldet `prompted`/`prompted_at`).
+- Modus vom Knob: nur „Plan-Modus“ (ein Eintrag, keine Auswahl; zurück auf Auto geht's beim
+  Annehmen des Plans). Desktop mit Mod und `control = keys`: die eigene `/plan` der App, getippt
+  (`app_set` key `mode`, wie `/effort`). Ohne Mod: Menü Cmd+Shift+M + Ziffer (Tastencode); CLI:
+  Shift+Tab-Zyklus. Andere Modi lehnt `ModAdapter.set` ab, `bypassPermissions` setzt der Knob nie.
+  Der Knob folgt der Session mit dem letzten Prompt (Mod meldet `prompted`/`prompted_at`).
 - Session wechseln vom Knob (Desktop): der Mod meldet `CLAUDE_CODE_HOST_SESSION_ID` (`local_…`, die
   ID der App, nicht die CLI-Session-ID) als `host_id`; die Bridge öffnet
   `claude://claude.ai/epitaxy/<host_id>`, damit die App die Session zeigt (sonst hat
