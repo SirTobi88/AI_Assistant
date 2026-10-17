@@ -64,6 +64,10 @@
   ein getipptes Zeichen wirkt im Menü nicht), zurück → Esc. Reihenfolge laut App: Auto, Manual,
   Accept edits, Plan. `bypassPermissions` setzt der Knob nie. Der Knob folgt der Session mit dem
   letzten Prompt (Mod meldet `prompted`/`prompted_at`).
+- Session wechseln vom Knob (Desktop): der Mod meldet `CLAUDE_CODE_HOST_SESSION_ID` (`local_…`, die
+  ID der App, nicht die CLI-Session-ID) als `host_id`; die Bridge öffnet
+  `claude://claude.ai/epitaxy/<host_id>`, damit die App die Session zeigt (sonst hat
+  `$.prompt.fill` dort kein Eingabefeld: „prompt box not available“).
 - Modell vom Knob (Desktop, `control = keys`): Menü der App Cmd+Shift+I + Ziffer (Opus, Sonnet,
   Fable, Haiku), damit auch die Auswahl unter dem Eingabefeld wechselt; das Menü geht wie beim Modus schon beim Öffnen der Auswahl am Knob auf; `/model` aus dem Mod ändert
   nur die Engine. CLI und Tastenkürzel aus: weiter `/model` im Mod. Tasten an die Desktop-App gehen
