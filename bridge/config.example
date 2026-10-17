@@ -68,7 +68,9 @@ chime = off
 #   usage = the numbers; the corner buddy and footer still follow Claude
 #   clawd = the big animation all the time
 #   auto  = the numbers, switching to the animation for a few seconds whenever
-#           Claude's state changes (default)
+#           Claude's state changes (15 s for needs you / your turn, with a
+#           "Zur Session" button after 5 s)
+# Default on the AI Knob: usage (the overview is its home screen).
 # screen_mode = auto
 # Animate the small buddy in the usage screen's corner (on, default) or not.
 # corner_buddy = on
