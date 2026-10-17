@@ -193,8 +193,12 @@ def plan_app_set(key: str, value: str, cfg: dict | None = None) -> Plan:
         text = "/plan"           # the knob offers no other mode (auto follows the plan)
     else:
         raise Unsupported(f"no app command for {key}")
-    return Plan(("desktop",), [("text", text), ("delay", 0.8),
-                               ("code", KEY_RETURN, ()), ("delay", 0.3)])
+    keys = [("text", text), ("delay", 0.8), ("code", KEY_RETURN, ()), ("delay", 0.3)]
+    if key == "mode":
+        # Without an argument the first Return only picks /plan in the slash
+        # menu; the second runs it (on an already empty box it does nothing).
+        keys += [("delay", 0.3), ("code", KEY_RETURN, ()), ("delay", 0.3)]
+    return Plan(("desktop",), keys)
 
 
 MENU_LETTERS = {"mode": "m", "model": "i"}

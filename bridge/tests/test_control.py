@@ -67,7 +67,9 @@ def test_desktop_effort_and_model_are_the_apps_typed_commands():
         with pytest.raises(c.Unsupported):
             c.plan_app_set("model", bad)
     # the knob's only mode: the app's own /plan
-    assert c.plan_app_set("mode", "plan").keys[0] == ("text", "/plan")
+    plan_keys = c.plan_app_set("mode", "plan").keys
+    assert plan_keys[0] == ("text", "/plan")
+    assert plan_keys.count(("code", c.KEY_RETURN, ())) == 2     # pick, then run
     for bad in ("auto", "default", "acceptEdits", "bypassPermissions"):
         with pytest.raises(c.Unsupported):
             c.plan_app_set("mode", bad)
