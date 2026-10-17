@@ -467,3 +467,18 @@ def test_anim_source_names_the_session():
     assert reg.anim_source() == ("work think", "a")
     reg.report({"sid": "b", "state": protocol.ASKING})
     assert reg.anim_source() == ("allow", "b")
+
+
+def test_stale_weekly_reading_of_an_idle_session_is_ignored():
+    reg = ms.ModRegistry(log=lambda m: None)
+    now = 1_800_000_000
+    week = "2027-01-20T08:00:00Z"
+    # idle since before the weekly reset: no five-hour window, last week's use
+    reg.report({"sid": "idle", "rate_limits": [{"kind": "seven_day", "percentUsed": 96, "resetsAt": week}]})
+    reg.report({"sid": "busy", "rate_limits": [
+        {"kind": "five_hour", "percentUsed": 21, "resetsAt": "2027-01-15T08:30:00Z"},
+        {"kind": "seven_day", "percentUsed": 3, "resetsAt": week}]})
+    for s in reg.sessions.values():
+        s.rate_ts = now
+    by_kind = {r["kind"]: r["percentUsed"] for r in reg.rate_limits(now=now)}
+    assert by_kind == {"five_hour": 21, "seven_day": 3}

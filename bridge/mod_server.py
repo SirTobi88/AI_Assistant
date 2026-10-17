@@ -279,9 +279,18 @@ class ModRegistry:
         now = time.time() if now is None else now
         best: dict = {}
         expired: set = set()
-        for s in self.sessions.values():
-            if not s.rate_limits or now - s.rate_ts >= RATE_FRESH_S:
-                continue
+        live = [s for s in self.sessions.values()
+                if s.rate_limits and now - s.rate_ts < RATE_FRESH_S]
+        # A session repeats the windows its last response saw: one idle since
+        # before the weekly reset still says 96 % for the new week. A current
+        # five-hour window means a request within 5 h; while any session has
+        # one, only those sessions count.
+        def recent(s) -> bool:
+            return any(isinstance(r, dict) and r.get("kind") == "five_hour"
+                       and (_reset_ts(r) or 0) > now for r in s.rate_limits)
+        if any(recent(s) for s in live):
+            live = [s for s in live if recent(s)]
+        for s in live:
             for r in s.rate_limits:
                 if not isinstance(r, dict):
                     continue
