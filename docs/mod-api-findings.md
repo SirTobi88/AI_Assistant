@@ -59,5 +59,10 @@ Session der Desktop-App. Typen: `plugin-authoring/types/claude-code.d.ts` des Bu
   ins Eingabefeld getippt + Return nimmt den oberen: Effort der App (`get_session`) low → high,
   im Transkript der Engine kein `/effort`. Daher (mit `control = keys`): Mod leert das Feld
   (`$.prompt.fill('')`), Bridge tippt (`/v1/type`), Mod setzt den Entwurf zurück.
+- Ebenso `/model`: der eigene Befehl der App braucht die volle ID (`/model claude-sonnet-5-5`),
+  der Alias `sonnet` ergibt „Unsupported model“. Mit Argument reicht ein Return.
+- Modus: `/permissions` öffnet nur das Menü und nimmt keine Argumente; `/plan` schaltet auf Plan,
+  für Auto/Manual/Accept edits gibt es keinen Befehl (`/auto` tut nichts) → Modus bleibt
+  Cmd+Shift+M + Ziffer.
 - `osascript`-Tastendrücke gehen nur aus dem Terminal-Panel der App (dort läuft die Bridge),
   nicht aus der Sandbox der Bash-Tools und nicht aus Terminal.app (beide: Fehler 1002).

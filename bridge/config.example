@@ -92,7 +92,9 @@ chime = off
 # Accessibility permission for the app that runs the bridge.
 #   control = keys      # off by default
 #
-# Desktop menu order (Cmd+Shift+I / M, items picked by digit). Check the
-# order in your app and correct it here if it differs:
+# The app's own /model takes full ids; the knob's names map to these:
+#   desktop_model_ids = fable=claude-fable-5-1, opus=claude-opus-5-5, sonnet=claude-sonnet-5-5, haiku=claude-haiku-5-5
+# Desktop menu order (Cmd+Shift+I without the mod / Cmd+Shift+M, items picked
+# by digit). Check the order in your app and correct it here if it differs:
 #   desktop_models  = default, fable, opus, sonnet, haiku
 #   desktop_modes   = default, acceptEdits, plan, auto, bypassPermissions

@@ -95,9 +95,9 @@ async function runCommand($: EngineInterface, cmd: any): Promise<void> {
     } else if (cmd.t === 'set' && cmd.key === 'effort') {
       await $.command.run({ command: 'effort', args: String(cmd.value) })
       effort = String(cmd.value)
-    } else if (cmd.t === 'app_set' && cmd.key === 'effort') {
-      // Desktop app: its own /effort, typed by the bridge, so the picker under
-      // the input field follows. The box must be empty for that; the draft
+    } else if (cmd.t === 'app_set' && (cmd.key === 'effort' || cmd.key === 'model')) {
+      // Desktop app: its own /effort or /model, typed by the bridge, so the
+      // picker under the input field follows. The box must be empty for that; the draft
       // goes back afterwards.
       const box = await $.prompt.read()
       const emptied = await $.prompt.fill({ text: '', mode: 'replace' })
@@ -108,7 +108,7 @@ async function runCommand($: EngineInterface, cmd: any): Promise<void> {
         try {
           const r = await call($, 'POST', '/v1/type', { sid, cmd })
           if (r?.ok) {
-            effort = String(cmd.value)
+            if (cmd.key === 'effort') effort = String(cmd.value)
           } else {
             ok = false
             error = 'keystrokes not sent'

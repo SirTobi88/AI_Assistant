@@ -269,17 +269,25 @@ def test_mode_set_by_keystroke_survives_the_mods_heartbeat():
     assert reg.sessions["d"].mode == "acceptEdits"
 
 
-def test_desktop_model_goes_to_the_app_menu_when_keys_are_on():
-    calls = []
+def test_desktop_model_goes_in_typed_when_keys_are_on():
+    calls, typed = [], []
 
     class Keys:
         def set(self, s, k, v): calls.append((k, v)); return True
+        def menu(self, s, k, o): calls.append(("menu", k)); return True
+        def app_set(self, key, value, label=""): typed.append((key, value)); return True
 
     reg = ms.ModRegistry(log=lambda m: None)
     reg.hello({"sid": "d", "entrypoint": "claude-desktop"})
     reg.hello({"sid": "t", "entrypoint": "cli"})
     a = control.ModAdapter(reg, Keys(), log=lambda m: None)
-    assert a.set(protocol.Session("d", "x"), "model", "sonnet") and calls == [("model", "sonnet")]
+    # the picker no longer opens the app's model menu (it would swallow the keys)
+    assert a.menu(protocol.Session("d", "x"), "model", True) and calls == []
+    assert a.menu(protocol.Session("d", "x"), "mode", True) and calls == [("menu", "mode")]
+    assert a.set(protocol.Session("d", "x"), "model", "sonnet")
+    assert reg.sessions["d"].commands[-1] == {"t": "app_set", "key": "model", "value": "sonnet"}
+    assert a.type_app("d", {"key": "model", "value": "sonnet"}) and typed == [("model", "sonnet")]
+    assert not a.set(protocol.Session("d", "x"), "model", "rm -rf /")
     # CLI sessions and keys off: /model in the mod as before
     assert a.set(protocol.Session("t", "y"), "model", "sonnet") and reg.sessions["t"].commands[-1]["key"] == "model"
     assert control.ModAdapter(reg, None, log=lambda m: None).set(protocol.Session("d", "x"), "model", "opus")
@@ -291,7 +299,7 @@ def test_desktop_effort_goes_through_the_mod_and_typed_keys():
 
     class Keys:
         def set(self, s, k, v): raise AssertionError("not through the keystroke set")
-        def app_effort(self, value, label=""): typed.append(value); return True
+        def app_set(self, key, value, label=""): typed.append(value); return True
 
     reg = ms.ModRegistry(log=lambda m: None)
     reg.hello({"sid": "d", "entrypoint": "claude-desktop"})
@@ -322,7 +330,7 @@ def test_type_endpoint_runs_the_adapter(sock):
         typed = []
 
         class Keys:
-            def app_effort(self, value, label=""): typed.append(value); return True
+            def app_set(self, key, value, label=""): typed.append(value); return True
 
         hub.adapter = control.ModAdapter(reg, Keys(), log=lambda m: None)
         assert hub.adapter.set(protocol.Session(SID, "x"), "effort", "high")

@@ -201,3 +201,22 @@ test('effort in the desktop app: no box, no keystrokes', async ($, on) => {
   expect(seen.some(s => s.path === '/v1/type')).toBe(false)
   expect(seen.find(s => s.path === '/v1/result').body.ok).toBe(false)
 })
+
+test('model in the desktop app goes the same way, typed by the bridge', async ($, on) => {
+  const seen: any[] = []
+  const commands: any[] = []
+  fakeSession(on)
+  let polls = 0
+  fakeBridge(on, {
+    '/v1/hello': { ok: true }, '/v1/state': { ok: true }, '/v1/result': { ok: true }, '/v1/type': { ok: true },
+    '/v1/commands': () => (polls++ === 0 ? { commands: [{ t: 'app_set', key: 'model', value: 'sonnet' }] } : null),
+  }, seen)
+  on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
+  on('prompt.fill', () => ({ isFilled: true }))
+  on('command.run', ($: any, e: any) => { commands.push(e); return { text: '' } })
+  await start($)
+  for (let i = 0; i < 200 && !seen.some(s => s.path === '/v1/result'); i++) await new Promise(r => setTimeout(r, 5))
+  expect(seen.find(s => s.path === '/v1/type').body.cmd.key).toBe('model')
+  expect(commands.length).toBe(0)
+  expect(seen.find(s => s.path === '/v1/result').body.ok).toBe(true)
+})

@@ -48,16 +48,26 @@ def test_desktop_uses_menus_not_text():
     assert not any(k[0] == "text" for k in plan.keys)
 
 
-def test_desktop_effort_is_the_apps_typed_command_and_only_with_the_mod():
+def test_desktop_effort_and_model_are_the_apps_typed_commands():
     # Cmd+Shift+E is the model popup: never used for effort.
     with pytest.raises(c.Unsupported):
         c.plan_set(DESK, "effort", "high", {})
-    plan = c.plan_app_effort("high")
+    plan = c.plan_app_set("effort", "high")
     assert plan.focus == ("desktop",) and plan.activate
     assert plan.keys[0] == ("text", "/effort high")
     assert ("code", c.KEY_RETURN, ()) in plan.keys
     with pytest.raises(c.Unsupported):
-        c.plan_app_effort("high\n/clear")
+        c.plan_app_set("effort", "high\n/clear")
+    # the app's /model takes full ids only
+    assert c.plan_app_set("model", "sonnet").keys[0] == ("text", "/model claude-sonnet-5-5")
+    assert c.plan_app_set("model", "claude-opus-5-5[1m]").keys[0] == ("text", "/model claude-opus-5-5[1m]")
+    cfg = {"desktop_model_ids": "sonnet = claude-sonnet-6-0"}
+    assert c.plan_app_set("model", "sonnet", cfg).keys[0] == ("text", "/model claude-sonnet-6-0")
+    for bad in ("default", "sonnet; rm -rf ~", "/clear"):
+        with pytest.raises(c.Unsupported):
+            c.plan_app_set("model", bad)
+    with pytest.raises(c.Unsupported):
+        c.plan_app_set("mode", "plan")
 
 
 def test_desktop_menu_order_from_config():
