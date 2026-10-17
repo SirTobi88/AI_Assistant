@@ -19,7 +19,7 @@ enum sess_state_t {
 
 struct SessRow {
     char    sid[PROTO_ID_LEN];
-    char    label[28];
+    char    label[64];      // 24 chars from the bridge, umlauts and "…" take 2-3 bytes
     uint8_t state;           // sess_state_t
     int8_t  ctx_pct;         // -1 = unknown
     char    model[16];

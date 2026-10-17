@@ -319,3 +319,25 @@ def test_switch_shows_the_session_in_the_desktop_app():
     # no desktop id, or not one: the knob follows, nothing is opened
     assert a.switch(protocol.Session("b", "cli")) and a.switch(protocol.Session("c", "x"))
     assert len(ran) == 1
+
+
+def test_desktop_titles_name_the_sessions_and_give_the_app_id(tmp_path):
+    from bridge.desktop_sessions import DesktopSessions
+    d = tmp_path / "acct" / "org"
+    d.mkdir(parents=True)
+    hid = "local_77d3da33-d266-432a-9855-91c08f67262f"
+    (d / f"{hid}.json").write_text(json.dumps(
+        {"sessionId": hid, "cliSessionId": "a", "title": "Spielstart-Befehl", "isArchived": False}))
+    (d / "local_old.json").write_text(json.dumps(
+        {"sessionId": "local_old", "cliSessionId": "b", "title": "Alt", "isArchived": True}))
+    (d / "local_bad.json").write_text("{")
+    reg = ms.ModRegistry(log=lambda m: None, desktop=DesktopSessions(tmp_path))
+    for sid in ("a", "b"):
+        reg.hello({"sid": sid, "cwd": "/Users/t/hanse_merchant"})
+    labels = {v.sid: v.label for v in reg.views()}
+    assert labels == {"a": "Spielstart-Befehl", "b": "hanse_merchant"}
+    # without the mod's own report, the app's id still comes from its files
+    assert reg.host_id("a") == hid and reg.host_id("b") == ""
+    ran = []
+    assert control.ModAdapter(reg, log=lambda m: None, run=ran.append).switch(protocol.Session("a", "x"))
+    assert ran == [["open", f"claude://claude.ai/epitaxy/{hid}"]]

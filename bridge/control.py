@@ -362,7 +362,7 @@ class ModAdapter:
             return self._fallback("switch", session)
         # Desktop app: open the session there too, by its own link, so the
         # app shows (and types into) the session the knob now follows.
-        host_id = self.registry.sessions[session.sid].host_id
+        host_id = self.registry.host_id(session.sid)
         if not HOST_ID_RE.fullmatch(host_id):
             return True
         self.log(f"control: show {session.label} in the desktop app")

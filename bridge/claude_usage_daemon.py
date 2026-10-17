@@ -25,13 +25,14 @@ from bleak import BleakClient
 from bleak.exc import BleakError
 
 try:
-    from . import knob_activity, codex_limits, control, mod_server, monitor, sessions, virtual_knob, voice
+    from . import knob_activity, codex_limits, control, desktop_sessions, mod_server, monitor, sessions, virtual_knob, voice
     from .hub import Hub
     from .link import KnobLink
 except ImportError:  # run as a script, not as the daemon package
     import knob_activity
     import codex_limits
     import control
+    import desktop_sessions
     import mod_server
     import monitor
     import sessions
@@ -42,7 +43,7 @@ except ImportError:  # run as a script, not as the daemon package
 
 # The knob side (protocol v1): set up in main(), shared by every connection.
 HUB: "Hub | None" = None
-MODS = mod_server.ModRegistry(log=lambda m: log(m))
+MODS = mod_server.ModRegistry(log=lambda m: log(m), desktop=desktop_sessions.DesktopSessions())
 MOD_USAGE_TICK = 30       # resend limits from the mods this often
 BURN = monitor.BurnTracker()
 _last_usage: dict = {}

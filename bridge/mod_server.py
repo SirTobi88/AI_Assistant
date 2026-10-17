@@ -75,13 +75,15 @@ class ModSession:
     pending: dict = field(default_factory=dict)       # key -> value queued, not yet confirmed
     wake: asyncio.Event = field(default_factory=asyncio.Event)
 
-    def view(self, now: float) -> protocol.Session:
+    def view(self, now: float, desktop_title: str = "") -> protocol.Session:
         state = self.state
         if now - self.state_ts > _DECAY.get(state, 10 ** 9):
             state = protocol.IDLE
         shown = {"model": short_model(self.model), "effort": self.effort, "mode": self.mode,
                  "fast": self.fast, **self.pending}
-        label = Path(self.cwd).name if self.cwd else (self.title or self.sid[:8])
+        # The desktop app's sidebar title tells sessions of one project apart;
+        # the folder name is the fallback (CLI sessions, titles not known).
+        label = desktop_title or (Path(self.cwd).name if self.cwd else (self.title or self.sid[:8]))
         return protocol.Session(
             sid=self.sid, label=label, state=state, ctx_pct=self.ctx_pct,
             model=str(shown["model"]), effort=str(shown["effort"]), mode=str(shown["mode"]),
@@ -91,8 +93,9 @@ class ModSession:
 class ModRegistry:
     """Sessions that run the mod, their command queues and their readings."""
 
-    def __init__(self, log=print) -> None:
+    def __init__(self, log=print, desktop=None) -> None:
         self.log = log
+        self.desktop = desktop          # desktop_sessions.DesktopSessions, or None
         self.sessions: dict[str, ModSession] = {}
         self._focus_ts = 0.0
 
@@ -183,7 +186,19 @@ class ModRegistry:
     def views(self, now: float | None = None) -> list[protocol.Session]:
         now = time.time() if now is None else now
         self.prune(now)
-        return [s.view(now) for s in sorted(self.sessions.values(), key=lambda s: -s.state_ts)]
+        return [s.view(now, self._desktop(s.sid).title if self._desktop(s.sid) else "")
+                for s in sorted(self.sessions.values(), key=lambda s: -s.state_ts)]
+
+    def _desktop(self, sid: str):
+        return self.desktop.get(sid) if self.desktop is not None else None
+
+    def host_id(self, sid: str) -> str:
+        """The desktop app's id for a session: from the mod, else the app's files."""
+        s = self.sessions.get(sid)
+        if s is not None and s.host_id:
+            return s.host_id
+        d = self._desktop(sid)
+        return d.host_id if d else ""
 
     # ---- commands
 

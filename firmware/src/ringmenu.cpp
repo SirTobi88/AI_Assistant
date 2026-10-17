@@ -58,6 +58,9 @@ static lv_obj_t* make_label(lv_obj_t* parent, const lv_font_t* font, lv_color_t 
     lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_width(l, w);
     lv_label_set_long_mode(l, LV_LABEL_LONG_DOT);
+    // One line, cut with "…": the rows sit at fixed heights, a wrapped long
+    // session title ran into the next one.
+    lv_obj_set_height(l, lv_font_get_line_height(font));
     lv_obj_align(l, LV_ALIGN_TOP_MID, 0, y);
     lv_label_set_text(l, "");
     return l;
