@@ -574,11 +574,11 @@ static void rec_update(void) {
     if (!rec_root) return;
     const uint32_t ms = voice_elapsed_ms();
     lv_arc_set_angles(rec_arc, 0, (lv_value_precise_t)((uint64_t)ms * 360 / VOICE_MAX_MS));
-    // Envelope: jumps up with each syllable, falls back over ~0.3 s, so the
+    // Envelope: rises with each syllable, falls back over ~0.4 s, so the
     // dot beats with the rhythm of speech instead of flickering per frame.
     static int env = 0;
     const int l = voice_level();
-    env = l > env ? l : env * 82 / 100;
+    env = l > env ? env + (l - env) / 2 : env * 90 / 100;   // rise in ~2 steps, fall ~0.4 s
     if (ms < 100) env = 0;                           // a new take starts small
     const int d = 36 + env * 84 / 100;               // 36..120 px with the voice
     lv_obj_set_size(rec_dot, d, d);

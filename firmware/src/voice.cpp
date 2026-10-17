@@ -22,13 +22,18 @@ static float noise_db = 0.0f;           // background level, tracked per take
 static void send_block(size_t n) {
     // RMS in dB, against a noise floor that follows the room: quick down,
     // slow up, so speech stands out and the dot rests while nobody talks.
-    float sum = 0.0f;
-    for (size_t i = 0; i < n; i++) sum += (float)block[i] * block[i];
+    // Without the mean: the PDM mic carries a DC offset (~1300) far above
+    // the speech on top of it, which kept the plain RMS flat at ~62 dB.
+    float mean = 0.0f, sum = 0.0f;
+    for (size_t i = 0; i < n; i++) mean += block[i];
+    mean /= (n ? n : 1);
+    for (size_t i = 0; i < n; i++) { const float v = block[i] - mean; sum += v * v; }
     const float db = 10.0f * log10f(sum / (n ? n : 1) + 1.0f);
     if (noise_db == 0.0f || db < noise_db) noise_db = db;
     else                                   noise_db += 0.001f * (db - noise_db);   // ~16 s to climb
-    // 4 dB above the floor = starts to move, 28 dB above = full.
-    const float l = (db - noise_db - 4.0f) * (100.0f / 24.0f);
+    // Measured on the knob: room ~10-15 dB, its noise up to ~+10 dB over the
+    // floor, speech +15..+35 dB. So 10 dB above = starts to move, 34 = full.
+    const float l = (db - noise_db - 10.0f) * (100.0f / 24.0f);
     level = l < 0 ? 0 : l > 100 ? 100 : (uint8_t)l;
     if (n & 1) block[n++] = 0;
     uint8_t frame[HEADER_BYTES + FRAME_SAMPLES / 2];
