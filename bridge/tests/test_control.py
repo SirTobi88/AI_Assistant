@@ -151,7 +151,8 @@ def test_menu_command_parses():
     cmd = protocol.parse_command({"t": "menu", "sid": "abc", "k": "mode", "open": 1})
     assert cmd.t == "menu" and cmd.args == {"sid": "abc", "key": "mode", "open": True}
     assert protocol.parse_command({"t": "menu", "sid": "abc", "k": "model", "open": 1}).args["key"] == "model"
-    assert protocol.parse_command({"t": "menu", "sid": "abc", "k": "effort", "open": 1}) is None
+    assert protocol.parse_command({"t": "menu", "sid": "abc", "k": "effort", "open": 1}).args["key"] == "effort"
+    assert protocol.parse_command({"t": "menu", "sid": "abc", "k": "fast", "open": 1}) is None
 
 
 def test_desktop_model_menu_opens_on_the_knob_and_then_takes_only_the_digit():
@@ -175,3 +176,14 @@ def test_desktop_model_menu_follows_the_app_order():
     assert c.plan_set(DESK, "model", "haiku", {}).keys[-1] == ("code", 21, ())
     # desktop keys go through the global key stream, never to the process
     assert "tell process" not in c.applescript(c.plan_set(DESK, "model", "opus", {}))
+
+
+def test_desktop_effort_menu_opens_on_the_knob_and_then_takes_only_the_digit():
+    sent = []
+    a = c.KeystrokeAdapter(log=lambda m: None, run=sent.append, cfg={})
+    s = protocol.Session("d", "x", entrypoint="claude-desktop")
+    assert a.menu(s, "effort", True)
+    assert 'keystroke "e" using {command down, shift down}' in sent[-1]
+    assert a.set(s, "effort", "high")
+    assert 'keystroke "e"' not in sent[-1] and "key code 20" in sent[-1]
+    assert "activate" not in sent[-1]

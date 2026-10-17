@@ -71,7 +71,7 @@
 - Session-Namen am Knob: `bridge/desktop_sessions.py` liest die Dateien der App
   (`~/Library/Application Support/Claude/claude-code-sessions/*/*/local_*.json`: `cliSessionId`,
   `sessionId`, `title`) → Sidebar-Titel statt Ordnername, und `host_id` auch ohne neues Plugin.
-- Modell vom Knob (Desktop, `control = keys`): Menü der App Cmd+Shift+I + Ziffer (Opus, Sonnet,
+- Modell und Reasoning vom Knob (Desktop, `control = keys`): Menü der App Cmd+Shift+I bzw. Cmd+Shift+E + Ziffer (Opus, Sonnet,
   Fable, Haiku), damit auch die Auswahl unter dem Eingabefeld wechselt; das Menü geht wie beim Modus schon beim Öffnen der Auswahl am Knob auf; `/model` aus dem Mod ändert
   nur die Engine. CLI und Tastenkürzel aus: weiter `/model` im Mod. Tasten an die Desktop-App gehen
   immer über den globalen Tastenstrom (nicht `tell process`).
