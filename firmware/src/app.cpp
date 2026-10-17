@@ -64,6 +64,13 @@ static lv_obj_t*   rec_root = nullptr;
 static lv_obj_t*   rec_arc = nullptr;
 static lv_obj_t*   rec_dot = nullptr;
 static lv_obj_t*   rec_time = nullptr;
+static lv_obj_t*   rec_hint = nullptr;
+// After release the same view waits for the transcript (rotating arc,
+// pulsing dot), so it is clear the take arrived and is being worked on.
+static bool        rec_waiting = false;
+static uint32_t    rec_wait_since = 0;
+static uint32_t    rec_take_ms = 0;
+#define REC_WAIT_MS   20000      // plus a quarter of the take: Whisper's time
 
 // ---------------------------------------------------------------- helpers
 
@@ -513,7 +520,6 @@ static void rec_create(void) {
     lv_obj_center(rec_arc);
     lv_arc_set_bg_angles(rec_arc, 0, 360);
     lv_arc_set_rotation(rec_arc, 270);
-    lv_arc_set_range(rec_arc, 0, VOICE_MAX_MS / 100);
     lv_obj_remove_style(rec_arc, NULL, LV_PART_KNOB);
     lv_obj_clear_flag(rec_arc, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_style_arc_width(rec_arc, 12, LV_PART_MAIN);
@@ -534,21 +540,40 @@ static void rec_create(void) {
     lv_obj_set_style_text_color(rec_time, THEME_TEXT, 0);
     lv_obj_align(rec_time, LV_ALIGN_CENTER, 0, 30);
 
-    lv_obj_t* hint = lv_label_create(rec_root);
-    lv_obj_set_style_text_font(hint, &font_styrene_20, 0);
-    lv_obj_set_style_text_color(hint, THEME_DIM, 0);
-    lv_label_set_text(hint, "Aufnahme – loslassen zum Senden");
-    lv_obj_set_width(hint, 220);
-    lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
-    lv_obj_align(hint, LV_ALIGN_CENTER, 0, 92);
+    rec_hint = lv_label_create(rec_root);
+    lv_obj_set_style_text_font(rec_hint, &font_styrene_20, 0);
+    lv_obj_set_style_text_color(rec_hint, THEME_DIM, 0);
+    lv_obj_set_width(rec_hint, 220);
+    lv_obj_set_style_text_align(rec_hint, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(rec_hint, LV_LABEL_LONG_WRAP);
+    lv_obj_align(rec_hint, LV_ALIGN_CENTER, 0, 92);
     lv_obj_add_flag(rec_root, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void rec_style(bool waiting) {
+    const lv_color_t c = waiting ? THEME_ACCENT : THEME_RED;
+    lv_obj_set_style_arc_color(rec_arc, c, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(rec_dot, c, 0);
+    lv_label_set_text(rec_hint, waiting ? "Text wird erkannt …" : "Aufnahme – loslassen zum Senden");
+    // Indicator angles set directly (not via value): a quarter that turns
+    // while waiting, the take so far while recording.
+    if (waiting) lv_arc_set_angles(rec_arc, 0, 90);
+    else         lv_arc_set_rotation(rec_arc, 270);
+}
+
+static void rec_wait_tick(void) {
+    const uint32_t t = millis() - rec_wait_since;
+    lv_arc_set_rotation(rec_arc, (270 + t * 360 / 1200) % 360);   // one turn per 1.2 s
+    const int phase = (int)(t % 1000);
+    const int d = 50 + (phase < 500 ? phase : 1000 - phase) * 30 / 500;   // 50..80 px
+    lv_obj_set_size(rec_dot, d, d);
+    lv_obj_align(rec_dot, LV_ALIGN_CENTER, 0, -50);
 }
 
 static void rec_update(void) {
     if (!rec_root) return;
     const uint32_t ms = voice_elapsed_ms();
-    lv_arc_set_value(rec_arc, (int32_t)(ms / 100));
+    lv_arc_set_angles(rec_arc, 0, (lv_value_precise_t)((uint64_t)ms * 360 / VOICE_MAX_MS));
     const int d = 44 + voice_level() * 56 / 100;    // 44..100 px with the voice
     lv_obj_set_size(rec_dot, d, d);
     lv_obj_align(rec_dot, LV_ALIGN_CENTER, 0, -50);
@@ -560,7 +585,7 @@ static void rec_update(void) {
 static void rec_show(bool on) {
     if (!rec_root) return;
     if (on) {
-        rec_update();
+        if (ptt_on) rec_update();        // waiting keeps the take's length
         lv_obj_clear_flag(rec_root, LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_foreground(rec_root);
     } else {
@@ -568,19 +593,36 @@ static void rec_show(bool on) {
     }
 }
 
+// The wait is over: transcript here (V_STT opens next) or given up on.
+static void rec_wait_end(void) {
+    if (!rec_waiting) return;
+    rec_waiting = false;
+    rec_show(false);
+    if (view == V_CLOSED && overlay) lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
+}
+
 static void ptt(bool on) {
     if (on == ptt_on) return;
     if (on && !connected) { show_hint("nicht verbunden"); return; }
     if (on && !voice_start()) { show_hint("kein Mikrofon"); return; }
+    if (on) rec_waiting = false;           // a new take ends an old wait
     ptt_on = on;
-    if (!on) voice_stop();
+    if (!on) {
+        rec_take_ms = voice_elapsed_ms();
+        voice_stop();
+    }
     proto_send_ptt(on);
-    rec_show(on);
     if (on) {
+        rec_style(false);
+        rec_show(true);
         ring_set_title(ring, "Aufnahme ...");
-    } else if (view != V_CLOSED) {
-        build(view, ring_focus(ring));
-        show_hint("transkribiere ...");
+    } else {
+        rec_waiting = true;
+        rec_wait_since = millis();
+        rec_style(true);
+        rec_wait_tick();
+        if (view != V_CLOSED) build(view, ring_focus(ring));
+        rec_show(true);
     }
 }
 
@@ -593,7 +635,7 @@ void app_ptt(bool on) {
         lv_obj_move_foreground(overlay);
     }
     ptt(on);
-    if (view == V_CLOSED && !ptt_on) lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
+    if (view == V_CLOSED && !ptt_on && !rec_waiting) lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
 }
 
 static void tap_timer_cb(lv_timer_t*) {
@@ -615,6 +657,7 @@ static void overlay_event_cb(lv_event_t* e) {
         last_input_ms = millis();
         idle_note_activity();
     }
+    if (rec_waiting) return;     // the menu underneath is not in sight
     switch (lv_event_get_code(e)) {
     case LV_EVENT_PRESSED:
         press_ms = now;
@@ -684,6 +727,7 @@ bool app_is_open(void) { return view != V_CLOSED; }
 bool app_encoder(int steps) {
     if (!steps) return false;
     last_input_ms = millis();
+    if (rec_waiting) return true;
     if (view == V_CLOSED) {
         open_view(V_MAIN);
         return true;
@@ -711,12 +755,14 @@ void app_on_proto(void) {
                    strcmp(st->prompts[st->n_prompts - 1].id, last_auto_prompt) != 0) {
             // A new prompt: wake up and show it, from wherever we are.
             snprintf(last_auto_prompt, sizeof(last_auto_prompt), "%s", st->prompts[st->n_prompts - 1].id);
+            rec_wait_end();      // a question beats the wait for a transcript
             prompt_return = (view == V_STT) ? V_CLOSED : view;
             idle_note_activity();
             open_next_prompt();
             return;
         }
     }
+    if ((chg & PROTO_CHG_STT) && st->stt.valid) rec_wait_end();
     if ((chg & PROTO_CHG_STT) && st->stt.valid && view != V_PROMPT) {
         if (view != V_STT) {
             prompt_return = view;
@@ -749,9 +795,15 @@ void app_set_connected(bool c) {
 
 void app_tick(void) {
     if (ptt_on && !voice_tick()) app_ptt(false);   // the take hit VOICE_MAX_MS
-    if (ptt_on) {
-        static uint32_t last_rec_ms = 0;
-        if (millis() - last_rec_ms >= 50) { last_rec_ms = millis(); rec_update(); }
+    static uint32_t last_rec_ms = 0;
+    if ((ptt_on || rec_waiting) && millis() - last_rec_ms >= 40) {
+        last_rec_ms = millis();
+        if (ptt_on) rec_update();
+        else        rec_wait_tick();
+    }
+    if (rec_waiting && millis() - rec_wait_since > REC_WAIT_MS + rec_take_ms / 4) {
+        rec_wait_end();          // no transcript: bridge gone or Whisper stuck
+        if (view != V_CLOSED) show_hint("keine Antwort vom Mac");
     }
     if (view == V_CLOSED) return;
     const uint32_t now = millis();
