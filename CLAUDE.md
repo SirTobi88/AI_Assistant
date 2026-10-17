@@ -55,6 +55,10 @@
   per `on('http.fetch'|'session.id'|…)` mit `{ value }` beantworten, `tool.call` mit `{ result }`).
   Validator: Ereignisname als Literal, Hook als Funktionsliteral, `$` nur an oben deklarierte
   Funktionen. Gemessene API-Fakten: `docs/mod-api-findings.md`. Installation: `tools/install_mod.sh`.
+  Installiert liegt eine Kopie im Cache (`~/.claude/plugins/cache/ai-knob-local/`): nach Änderungen
+  `version` in `plugin.json` erhöhen, `claude plugin marketplace update ai-knob-local` und
+  `claude plugin update ai-knob@ai-knob-local --scope user`, dann `/reload-plugins`. Sprach-Prompts
+  gehen mit `asUser: true` rein (sonst rahmt die Engine sie als „The ai-knob plugin sent a message“).
 - Modus vom Knob (Desktop): nur über das Menü der App (`control = keys`): Knob öffnet die
   Modus-Auswahl → Bridge drückt Cmd+Shift+M, Wahl → Ziffer als **Tastencode** (`key code 18–21`,
   ein getipptes Zeichen wirkt im Menü nicht), zurück → Esc. Reihenfolge laut App: Auto, Manual,
