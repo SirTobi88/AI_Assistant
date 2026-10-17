@@ -58,6 +58,10 @@ class LoggingAdapter:
         self.log(f"control off: would send {text!r} to {session.label}")
         return False
 
+    def fill(self, session, text: str) -> bool:
+        self.log(f"control off: would put {text!r} in {session.label}'s prompt box")
+        return False
+
 
 class Hub:
     def __init__(self, adapter: Adapter | None = None, log=print,
@@ -224,6 +228,16 @@ class Hub:
                 prompt(target, text)
             elif text:
                 self.log("Voice: no session to send the text to")
+            return
+        if cmd.t == "stt_edit":
+            # Into the session's prompt box, to finish it on the computer.
+            text = self._stt.pop(a["id"], None)
+            target = next((s for s in self.sessions if s.sid == self.active), None)
+            fill = getattr(self.adapter, "fill", None)
+            if text and target is not None and fill is not None:
+                fill(target, text)
+            elif text:
+                self.log("Voice: no session to put the text in")
             return
         if cmd.t == "stt_drop":
             self._stt.pop(a["id"], None)

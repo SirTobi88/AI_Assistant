@@ -120,6 +120,11 @@ async function runCommand($: EngineInterface, cmd: any): Promise<void> {
     } else if (cmd.t === 'prompt' && typeof cmd.text === 'string' && cmd.text) {
       // The person's own spoken words: bare, without the plugin frame.
       await $.prompt.submit({ text: cmd.text, asUser: true })
+    } else if (cmd.t === 'fill' && typeof cmd.text === 'string' && cmd.text) {
+      // To edit on the computer: after whatever is already typed, not over it.
+      const box = await $.prompt.read()
+      const r = await $.prompt.fill({ text: box.text ? ` ${cmd.text}` : cmd.text, mode: 'append' })
+      if (!r.isFilled) { ok = false; error = 'prompt box not available' }
     } else {
       ok = false
       error = `unknown command ${JSON.stringify(cmd)}`

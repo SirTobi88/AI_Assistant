@@ -101,6 +101,7 @@ Mehrere offene Prompts stehen in einer Warteschlange; der Knob zeigt den ältest
 | Modus-/Modell-Menü der App | `{"t":"menu","sid":"a1b2","k":"mode","open":1}` (bzw. `"k":"model"`) beim Öffnen der Modus- bzw. Modell-Auswahl, `"open":0` beim Verlassen ohne Wahl. Nur Desktop-App mit `control = keys`: Cmd+Shift+M bzw. Cmd+Shift+I, zurück Esc; das folgende `set` drückt dann nur die Ziffer |
 | Push-to-talk | `{"t":"ptt","on":1}` / `{"t":"ptt","on":0}` |
 | Transkript senden/verwerfen | `{"t":"stt_send","id":"v3"}` / `{"t":"stt_drop","id":"v3"}` |
+| Transkript am PC bearbeiten | `{"t":"stt_edit","id":"v3"}`: Text ins Eingabefeld der aktiven Session (Mod: `$.prompt.fill`, angehängt), nicht abgeschickt |
 | Hallo (nach Verbindung) | `{"t":"hello","v":1,"fw":"0.1.0"}` |
 
 ## AUDIO (Push-to-talk)

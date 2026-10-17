@@ -224,6 +224,12 @@ void proto_send_stt(const char* id, bool send) {
     send_doc(doc);
 }
 
+void proto_send_stt_edit(const char* id) {
+    JsonDocument doc;
+    doc["t"] = "stt_edit"; doc["id"] = id;
+    send_doc(doc);
+}
+
 void proto_send_hello(const char* fw) {
     JsonDocument doc;
     doc["t"] = "hello"; doc["v"] = 1; doc["fw"] = fw;

@@ -65,7 +65,7 @@ struct MonitorData {
 struct SttData {
     bool valid;
     char id[PROTO_ID_LEN];
-    char text[320];
+    char text[1600];         // up to protocol.MAX_STT_TEXT (1500 chars, umlauts 2 bytes)
     bool final;
 };
 
@@ -111,6 +111,7 @@ void proto_send_menu(const char* sid, const char* key, bool open);
 void proto_send_interrupt(const char* sid);
 void proto_send_ptt(bool on);
 void proto_send_stt(const char* id, bool send);
+void proto_send_stt_edit(const char* id);   // into the session's prompt box
 void proto_send_hello(const char* fw);
 
 // Pure builder used by the senders above and the host unit test.

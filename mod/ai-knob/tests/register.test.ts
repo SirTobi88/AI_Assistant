@@ -148,3 +148,21 @@ test('a voice prompt from the knob goes in as the person\'s own words', async ($
   // no "The ai-knob plugin sent a message" frame around it
   expect(prompts[0].origin.asUser).toBe(true)
 })
+
+test('a voice text to edit goes into the prompt box, after what is typed', async ($, on) => {
+  const seen: any[] = []
+  const fills: any[] = []
+  fakeSession(on)
+  let polls = 0
+  fakeBridge(on, {
+    '/v1/hello': { ok: true }, '/v1/state': { ok: true }, '/v1/result': { ok: true },
+    '/v1/commands': () => (polls++ === 0 ? { commands: [{ t: 'fill', text: 'Lass die Tests laufen' }] } : null),
+  }, seen)
+  on('prompt.read', () => ({ value: { text: 'Bitte:', cursor: 6 } }))
+  on('prompt.fill', ($: any, e: any) => { fills.push(e); return { isFilled: true } })
+  await start($)
+  for (let i = 0; i < 200 && !seen.some(s => s.path === '/v1/result'); i++) await new Promise(r => setTimeout(r, 5))
+  expect(fills[0].text).toBe(' Lass die Tests laufen')
+  expect(fills[0].mode).toBe('append')
+  expect(seen.find(s => s.path === '/v1/result').body.ok).toBe(true)
+})

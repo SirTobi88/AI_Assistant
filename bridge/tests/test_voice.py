@@ -168,3 +168,45 @@ def test_hub_from_ptt_to_prompt(encoder, monkeypatch):
         hub.on_command(protocol.Command("stt_send", {"id": stt[0]["id"]}))   # only once
         assert len(prompts) == 1
     asyncio.run(go())
+
+
+def test_hub_puts_a_transcript_in_the_prompt_box_to_edit(monkeypatch):
+    fills, prompts = [], []
+
+    class Adapter:
+        def prompt(self, s, text): prompts.append(text); return True
+        def fill(self, s, text): fills.append((s.sid, text)); return True
+
+    long_text = "Wort " * 400
+    monkeypatch.setattr(voice, "transcribe", lambda samples, cfg=None: long_text.strip())
+
+    async def go():
+        hub = Hub(adapter=Adapter(), log=lambda m: None, socket_path=Path(tempfile.mkdtemp(dir="/tmp")) / "h.sock")
+        link = FakeLink()
+        await hub.attach(link)
+        await hub.set_sessions([protocol.Session("s1", "AI_Assistant")])
+        hub.on_command(protocol.Command("ptt", {"on": True}))
+        hub.on_audio(struct.pack("<HhB", 0, 0, 0) + bytes(128))
+        hub.on_command(protocol.Command("ptt", {"on": False}))
+        for _ in range(100):
+            stt = [m for m in link.sent if m.get("t") == "stt"]
+            if stt:
+                break
+            await asyncio.sleep(0.02)
+        # the knob gets enough to read through (not cut at 300 like prompts)
+        assert len(stt[0]["tx"]) > 1000
+        cmd = protocol.parse_command({"t": "stt_edit", "id": stt[0]["id"]})
+        hub.on_command(cmd)
+        assert fills == [("s1", long_text.strip())] and prompts == []
+        hub.on_command(protocol.Command("stt_send", {"id": stt[0]["id"]}))   # gone already
+        assert prompts == []
+    asyncio.run(go())
+
+
+def test_mod_adapter_queues_a_fill():
+    from bridge import control, mod_server
+    reg = mod_server.ModRegistry()
+    reg.hello({"sid": "s1", "entrypoint": "claude-desktop"})
+    a = control.ModAdapter(reg, log=lambda m: None)
+    assert a.fill(protocol.Session("s1", "x"), "Hallo")
+    assert asyncio.run(reg.take("s1", 0)) == [{"t": "fill", "text": "Hallo"}]

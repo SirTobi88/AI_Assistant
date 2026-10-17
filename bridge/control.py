@@ -392,6 +392,14 @@ class ModAdapter:
         self.log(f"control: voice prompt for {session.label} ({len(text)} chars)")
         return self.registry.queue(session.sid, {"t": "prompt", "text": text})
 
+    def fill(self, session, text: str) -> bool:
+        """A transcript into the session's prompt box, to edit before sending."""
+        if not self.registry.has(session.sid):
+            self.log(f"control: voice text for {session.label} not possible (no mod for it)")
+            return False
+        self.log(f"control: voice text into {session.label}'s prompt box ({len(text)} chars)")
+        return self.registry.queue(session.sid, {"t": "fill", "text": text})
+
     def menu(self, session, key: str, open_: bool) -> bool:
         # Only the keystroke path has a menu to show.
         return self.fallback.menu(session, key, open_) if self.fallback is not None else False

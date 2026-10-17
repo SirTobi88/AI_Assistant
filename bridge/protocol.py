@@ -22,6 +22,7 @@ MAX_SESSIONS = 12
 MAX_OPTIONS = 8
 MAX_OPTION_LEN = 40
 MAX_PROMPT_TEXT = 300
+MAX_STT_TEXT = 1500      # the knob's reading view scrolls; firmware SttData.text holds it
 
 SETTING_KEYS = ("model", "effort", "mode", "fast")
 # Session ids go out shortened (Claude's are 36-char UUIDs, the knob keeps 15);
@@ -104,7 +105,7 @@ def prompt_done_msg(prompt_id: str) -> dict:
 
 
 def stt_msg(stt_id: str, text: str, final: bool) -> dict:
-    return {"t": "stt", "id": stt_id, "tx": _clip(text, MAX_PROMPT_TEXT), "fin": int(final)}
+    return {"t": "stt", "id": stt_id, "tx": _clip(text, MAX_STT_TEXT), "fin": int(final)}
 
 
 # ---------------------------------------------------------------- framing
@@ -206,7 +207,7 @@ def parse_command(obj: dict | None) -> Command | None:
         return Command(t, {"sid": obj["sid"], "key": obj["k"], "open": bool(obj.get("open"))})
     if t == "ptt":
         return Command(t, {"on": bool(obj.get("on"))})
-    if t in ("stt_send", "stt_drop"):
+    if t in ("stt_send", "stt_drop", "stt_edit"):
         return Command(t, {"id": obj["id"]}) if isinstance(obj.get("id"), str) else None
     if t == "hello":
         return Command(t, {"v": obj.get("v"), "fw": obj.get("fw")})

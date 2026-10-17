@@ -26,7 +26,7 @@ enum view_t { V_CLOSED, V_MAIN, V_SESSIONS, V_PICK, V_MONITOR, V_PROMPT, V_BRIGH
 enum action_t {
     A_NONE, A_BACK, A_CLOSE,
     A_SESSIONS, A_MODEL, A_EFFORT, A_MODE, A_FAST, A_MONITOR, A_INTERRUPT, A_BRIGHT, A_PROMPTS,
-    A_SESSION, A_OPTION, A_ANSWER, A_TOGGLE, A_SUBMIT, A_LATER, A_STT_SEND, A_STT_DROP,
+    A_SESSION, A_OPTION, A_ANSWER, A_TOGGLE, A_SUBMIT, A_LATER,
 };
 
 static lv_obj_t* overlay = nullptr;
@@ -70,6 +70,18 @@ static lv_obj_t*   rec_hint = nullptr;
 static bool        rec_waiting = false;
 static uint32_t    rec_wait_since = 0;
 static uint32_t    rec_take_ms = 0;
+// Reading view for a transcript (V_STT): the text full-screen in a big font,
+// the ring scrolls it and, at its end, picks the action shown in the pill.
+// Tap = that action, double tap = discard, hold = record anew.
+enum stt_act_t { STT_SEND, STT_EDIT, STT_DROP, STT_N_ACTS };
+static lv_obj_t*   stt_root = nullptr;
+static lv_obj_t*   stt_clip = nullptr;
+static lv_obj_t*   stt_label = nullptr;
+static lv_obj_t*   stt_bar = nullptr;
+static lv_obj_t*   stt_pill = nullptr;
+static lv_obj_t*   stt_pill_lbl = nullptr;
+static int         stt_scroll = 0;          // px the text is moved up
+static int         stt_act = STT_SEND;
 #define REC_WAIT_MS   20000      // plus a quarter of the take: Whisper's time
 
 // ---------------------------------------------------------------- helpers
@@ -306,14 +318,156 @@ static void build_bright(int) {
     ring_set_hold(ring, brightness_get() * 1000 / 255);
 }
 
-static void build_stt(int focus) {
+static void close_app(void);
+static void open_view(view_t v, int focus = -1);
+
+LV_FONT_DECLARE(font_styrene_24);
+LV_FONT_DECLARE(font_styrene_20);
+LV_FONT_DECLARE(font_styrene_14);
+
+#define STT_CLIP_W   256
+#define STT_CLIP_Y   62
+#define STT_LINES    6              // whole lines in the window, none cut in half
+#define STT_LINE_GAP 4
+static int stt_line = 30;            // px per line, from the font at create
+static int stt_clip_h = 180;
+
+static bool stt_sendable(void) {
     const SttData* t = &proto_state()->stt;
-    ring_set_count(ring, 2, 0);
-    item(0, "Senden", t->final ? "an aktive Session" : "hört noch zu", 0, A_STT_SEND);
-    item(1, "Verwerfen", "", 0, A_STT_DROP);
-    ring_set_title(ring, "Spracheingabe");
-    ring_set_body(ring, *t->text ? t->text : "...");
-    ring_trim(ring, 2, focus >= 0 ? focus : 0);
+    return t->final && t->text[0] && strcmp(t->text, "(nichts verstanden)") != 0;
+}
+
+static int stt_max_scroll(void) {
+    lv_obj_update_layout(stt_label);
+    const int h = lv_obj_get_height(stt_label);
+    if (h <= stt_clip_h) return 0;
+    return (h - stt_clip_h + stt_line - 1) / stt_line * stt_line;   // to a whole line
+}
+
+static void stt_create(void) {
+    stt_line = lv_font_get_line_height(&font_styrene_24) + STT_LINE_GAP;
+    stt_clip_h = STT_LINES * stt_line - STT_LINE_GAP;
+    stt_root = lv_obj_create(overlay);
+    lv_obj_remove_style_all(stt_root);
+    lv_obj_set_size(stt_root, LV_PCT(100), LV_PCT(100));
+    lv_obj_set_style_bg_color(stt_root, THEME_BG, 0);
+    lv_obj_set_style_bg_opa(stt_root, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(stt_root, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
+
+    lv_obj_t* title = lv_label_create(stt_root);
+    lv_obj_set_style_text_font(title, &font_styrene_14, 0);
+    lv_obj_set_style_text_color(title, THEME_DIM, 0);
+    lv_label_set_text(title, "Spracheingabe");
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 34);
+
+    // The text moves inside a fixed window; children are clipped to it.
+    stt_clip = lv_obj_create(stt_root);
+    lv_obj_remove_style_all(stt_clip);
+    lv_obj_set_size(stt_clip, STT_CLIP_W, stt_clip_h);
+    lv_obj_align(stt_clip, LV_ALIGN_TOP_MID, 0, STT_CLIP_Y);
+    lv_obj_clear_flag(stt_clip, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
+
+    stt_label = lv_label_create(stt_clip);
+    lv_obj_set_width(stt_label, STT_CLIP_W);
+    lv_label_set_long_mode(stt_label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_font(stt_label, &font_styrene_24, 0);
+    lv_obj_set_style_text_color(stt_label, THEME_TEXT, 0);
+    lv_obj_set_style_text_line_space(stt_label, STT_LINE_GAP, 0);
+
+    // Where the window is in the text: a short arc on the right rim.
+    stt_bar = lv_arc_create(stt_root);
+    lv_obj_set_size(stt_bar, 344, 344);
+    lv_obj_center(stt_bar);
+    lv_arc_set_rotation(stt_bar, 0);
+    lv_arc_set_bg_angles(stt_bar, 320, 40);
+    lv_obj_remove_style(stt_bar, NULL, LV_PART_KNOB);
+    lv_obj_clear_flag(stt_bar, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_arc_width(stt_bar, 6, LV_PART_MAIN);
+    lv_obj_set_style_arc_color(stt_bar, THEME_BAR_BG, LV_PART_MAIN);
+    lv_obj_set_style_arc_width(stt_bar, 6, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(stt_bar, THEME_DIM, LV_PART_INDICATOR);
+
+    stt_pill = lv_obj_create(stt_root);
+    lv_obj_remove_style_all(stt_pill);
+    lv_obj_set_size(stt_pill, 210, 44);
+    lv_obj_align(stt_pill, LV_ALIGN_TOP_MID, 0, STT_CLIP_Y + stt_clip_h + 10);
+    lv_obj_set_style_radius(stt_pill, 22, 0);
+    lv_obj_set_style_bg_opa(stt_pill, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(stt_pill, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
+    stt_pill_lbl = lv_label_create(stt_pill);
+    lv_obj_set_style_text_font(stt_pill_lbl, &font_styrene_20, 0);
+    lv_obj_center(stt_pill_lbl);
+
+    lv_obj_t* hint = lv_label_create(stt_root);
+    lv_obj_set_style_text_font(hint, &font_styrene_14, 0);
+    lv_obj_set_style_text_color(hint, THEME_DIM, 0);
+    lv_label_set_text(hint, "Doppeltipp verwirft · Halten: neu");
+    lv_obj_align(hint, LV_ALIGN_TOP_MID, 0, STT_CLIP_Y + stt_clip_h + 62);
+    lv_obj_add_flag(stt_root, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void stt_render(void) {
+    lv_obj_set_y(stt_label, -stt_scroll);
+    const int max = stt_max_scroll();
+    if (max > 0) {
+        const int h = stt_clip_h + max;
+        const int a0 = 320 + 80 * stt_scroll / h;
+        const int a1 = 320 + 80 * (stt_scroll + stt_clip_h) / h;
+        lv_arc_set_angles(stt_bar, a0 % 360, a1 % 360);
+        lv_obj_clear_flag(stt_bar, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(stt_bar, LV_OBJ_FLAG_HIDDEN);
+    }
+    static const char* names[STT_N_ACTS] = {"Senden", "Am PC bearbeiten", "Verwerfen"};
+    lv_label_set_text(stt_pill_lbl, names[stt_act]);
+    lv_obj_set_style_bg_color(stt_pill, stt_act == STT_SEND ? THEME_ACCENT : THEME_PANEL, 0);
+    lv_obj_set_style_text_color(stt_pill_lbl, stt_act == STT_DROP ? THEME_RED : THEME_TEXT, 0);
+}
+
+// A fresh transcript (or the same one updated): back to the top, "Senden"
+// first unless there is nothing to send.
+static void build_stt(int focus) {
+    (void)focus;
+    const SttData* t = &proto_state()->stt;
+    lv_label_set_text(stt_label, *t->text ? t->text : "...");
+    stt_scroll = 0;
+    stt_act = stt_sendable() ? STT_SEND : STT_DROP;
+    stt_render();
+    lv_obj_clear_flag(stt_root, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(stt_root);
+}
+
+static void stt_hide(void) {
+    if (stt_root) lv_obj_add_flag(stt_root, LV_OBJ_FLAG_HIDDEN);
+}
+
+// Ring: forward reads on, then steps through the actions; back the same way.
+static void stt_ring(int steps) {
+    const int max = stt_max_scroll();
+    const int first = stt_sendable() ? STT_SEND : STT_DROP;
+    for (int n = steps > 0 ? steps : -steps; n > 0; n--) {
+        if (steps > 0) {
+            if (stt_scroll < max) stt_scroll = stt_scroll + 2 * stt_line < max ? stt_scroll + 2 * stt_line : max;
+            else if (stt_act < STT_N_ACTS - 1 && stt_sendable()) stt_act++;
+        } else {
+            if (stt_act > first) stt_act--;
+            else if (stt_scroll > 0) stt_scroll = stt_scroll > 2 * stt_line ? stt_scroll - 2 * stt_line : 0;
+        }
+    }
+    stt_render();
+}
+
+static void stt_leave(void) {
+    proto_state()->stt.valid = false;
+    stt_hide();
+    if (prompt_return == V_CLOSED) close_app(); else open_view(prompt_return);
+}
+
+static void stt_do(int act_) {
+    SttData* t = &proto_state()->stt;
+    if (act_ == STT_EDIT)      proto_send_stt_edit(t->id);
+    else                       proto_send_stt(t->id, act_ == STT_SEND);
+    stt_leave();
 }
 
 static void build(view_t v, int focus) {
@@ -323,6 +477,7 @@ static void build(view_t v, int focus) {
         proto_send_menu(menu_sid, menu_key, false);
         menu_sid[0] = 0;
     }
+    if (v != V_STT) stt_hide();
     view = v;
     switch (v) {
     case V_MAIN:     build_main(focus); break;
@@ -338,7 +493,7 @@ static void build(view_t v, int focus) {
 
 // ---------------------------------------------------------------- open / close
 
-static void open_view(view_t v, int focus = -1) {
+static void open_view(view_t v, int focus) {
     if (!overlay) return;
     lv_obj_clear_flag(overlay, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(overlay);
@@ -352,6 +507,7 @@ static void close_app(void) {
         menu_sid[0] = 0;
     }
     view = V_CLOSED;
+    stt_hide();
     hint_until = 0;
     if (overlay) lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
 }
@@ -375,10 +531,7 @@ static void back(void) {
     switch (view) {
     case V_MAIN:   close_app(); break;
     case V_PROMPT: prompt_return = V_CLOSED; close_app(); break;   // = Später, straight home
-    case V_STT:    proto_send_stt(proto_state()->stt.id, false);
-                   proto_state()->stt.valid = false;
-                   if (prompt_return == V_CLOSED) close_app(); else open_view(prompt_return);
-                   break;
+    case V_STT:    stt_do(STT_DROP); break;
     default:       open_view(V_MAIN); break;
     }
 }
@@ -485,14 +638,6 @@ static void activate(bool confirmed) {
     case A_LATER:
         if (prompt_return == V_CLOSED) close_app(); else open_view(prompt_return);
         break;
-    case A_STT_SEND:
-    case A_STT_DROP: {
-        SttData* t = &proto_state()->stt;
-        proto_send_stt(t->id, act[f] == A_STT_SEND);
-        t->valid = false;
-        if (prompt_return == V_CLOSED) close_app(); else open_view(prompt_return);
-        break;
-    }
     case A_NONE:
     default:
         break;
@@ -612,6 +757,13 @@ static void ptt(bool on) {
     if (on && !connected) { show_hint("nicht verbunden"); return; }
     if (on && !voice_start()) { show_hint("kein Mikrofon"); return; }
     if (on) rec_waiting = false;           // a new take ends an old wait
+    if (on && view == V_STT) {             // hold on a transcript: record it anew
+        proto_send_stt(proto_state()->stt.id, false);
+        proto_state()->stt.valid = false;
+        stt_hide();
+        if (prompt_return == V_CLOSED) view = V_CLOSED;   // overlay stays for the recording
+        else build(prompt_return, -1);
+    }
     ptt_on = on;
     if (!on) {
         rec_take_ms = voice_elapsed_ms();
@@ -646,6 +798,7 @@ void app_ptt(bool on) {
 
 static void tap_timer_cb(lv_timer_t*) {
     tap_timer = nullptr;
+    if (view == V_STT) { stt_do(stt_act); return; }
     activate(false);
 }
 
@@ -725,6 +878,7 @@ void app_init(void) {
     lv_obj_add_event_cb(overlay, overlay_event_cb, LV_EVENT_ALL, NULL);
     ring = ring_create(overlay);
     rec_create();
+    stt_create();
     lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
 }
 
@@ -743,6 +897,7 @@ bool app_encoder(int steps) {
         build(V_BRIGHT, 0);
         return true;
     }
+    if (view == V_STT) { stt_ring(steps); return true; }
     if (hint_until) { hint_until = 0; build(view, ring_focus(ring)); }
     ring_step(ring, steps);
     return true;

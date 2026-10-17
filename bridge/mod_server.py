@@ -12,7 +12,7 @@ close`, no keep-alive. Stdlib only.
     POST /v1/ask       {sid, what, tool, input, suggestions}          blocks until the knob answers
     POST /v1/bye       {sid}
 
-Commands for a session: {t:"set", key, value} | {t:"interrupt"} | {t:"prompt", text}.
+Commands for a session: {t:"set", key, value} | {t:"interrupt"} | {t:"prompt", text} | {t:"fill", text}.
 `/v1/ask` answers in the shape the mod returns to Claude Code:
     what=permission -> {decision}  (PermissionRequest decision, or null)
     what=question   -> {answers}   (AskUserQuestion answers, or null)
