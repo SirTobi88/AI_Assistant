@@ -95,6 +95,28 @@ async function runCommand($: EngineInterface, cmd: any): Promise<void> {
     } else if (cmd.t === 'set' && cmd.key === 'effort') {
       await $.command.run({ command: 'effort', args: String(cmd.value) })
       effort = String(cmd.value)
+    } else if (cmd.t === 'app_set' && cmd.key === 'effort') {
+      // Desktop app: its own /effort, typed by the bridge, so the picker under
+      // the input field follows. The box must be empty for that; the draft
+      // goes back afterwards.
+      const box = await $.prompt.read()
+      const emptied = await $.prompt.fill({ text: '', mode: 'replace' })
+      if (!emptied.isFilled) {
+        ok = false
+        error = 'prompt box not available'
+      } else {
+        try {
+          const r = await call($, 'POST', '/v1/type', { sid, cmd })
+          if (r?.ok) {
+            effort = String(cmd.value)
+          } else {
+            ok = false
+            error = 'keystrokes not sent'
+          }
+        } finally {
+          if (box.text) await $.prompt.fill({ text: box.text, mode: 'replace' })
+        }
+      }
     } else if (cmd.t === 'set' && cmd.key === 'mode') {
       // Desktop app only (the bridge sends it nowhere else): the app's own
       // session tool, which shows its approval card before a mode that does

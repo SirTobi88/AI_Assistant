@@ -286,6 +286,52 @@ def test_desktop_model_goes_to_the_app_menu_when_keys_are_on():
     assert reg.sessions["d"].commands[-1] == {"t": "set", "key": "model", "value": "opus"}
 
 
+def test_desktop_effort_goes_through_the_mod_and_typed_keys():
+    typed = []
+
+    class Keys:
+        def set(self, s, k, v): raise AssertionError("not through the keystroke set")
+        def app_effort(self, value, label=""): typed.append(value); return True
+
+    reg = ms.ModRegistry(log=lambda m: None)
+    reg.hello({"sid": "d", "entrypoint": "claude-desktop"})
+    reg.hello({"sid": "t", "entrypoint": "cli"})
+    a = control.ModAdapter(reg, Keys(), log=lambda m: None)
+    assert a.set(protocol.Session("d", "x"), "effort", "high")
+    assert reg.sessions["d"].commands[-1] == {"t": "app_set", "key": "effort", "value": "high"}
+    assert reg.sessions["d"].pending == {"effort": "high"}
+    # only what the bridge queued for that session is typed
+    assert not a.type_app("d", {"key": "effort", "value": "max"}) and typed == []
+    assert not a.type_app("t", {"key": "effort", "value": "high"})
+    assert a.type_app("d", {"key": "effort", "value": "high"}) and typed == ["high"]
+    reg.result({"sid": "d", "cmd": {"t": "app_set", "key": "effort", "value": "high"}, "ok": True})
+    assert reg.sessions["d"].effort == "high" and not reg.sessions["d"].pending
+    # CLI sessions and keys off: the engine's /effort in the mod as before
+    assert a.set(protocol.Session("t", "y"), "effort", "low")
+    assert reg.sessions["t"].commands[-1] == {"t": "set", "key": "effort", "value": "low"}
+    assert control.ModAdapter(reg, None, log=lambda m: None).set(protocol.Session("d", "x"), "effort", "max")
+    assert reg.sessions["d"].commands[-1] == {"t": "set", "key": "effort", "value": "max"}
+
+
+def test_type_endpoint_runs_the_adapter(sock):
+    async def go():
+        hub, reg, server, _ = await setup(sock)
+        await http(sock, "POST", "/v1/hello", {"sid": SID, "entrypoint": "claude-desktop"})
+        st, rep = await http(sock, "POST", "/v1/type", {"sid": SID, "cmd": {"key": "effort", "value": "high"}})
+        assert st == 200 and rep == {"ok": False}          # keys off: nothing typed
+        typed = []
+
+        class Keys:
+            def app_effort(self, value, label=""): typed.append(value); return True
+
+        hub.adapter = control.ModAdapter(reg, Keys(), log=lambda m: None)
+        assert hub.adapter.set(protocol.Session(SID, "x"), "effort", "high")
+        st, rep = await http(sock, "POST", "/v1/type", {"sid": SID, "cmd": {"key": "effort", "value": "high"}})
+        assert rep == {"ok": True} and typed == ["high"]
+        await server.stop()
+    asyncio.run(go())
+
+
 def test_a_reset_window_reads_as_unused():
     reg = ms.ModRegistry(log=lambda m: None)
     now = 1_800_000_000

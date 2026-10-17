@@ -9,10 +9,14 @@ close`, no keep-alive. Stdlib only.
                         ctx_pct, tokens, rate_limits}                 and every 10 s)
     GET  /v1/commands?sid=…&wait=25                                   long poll -> {commands: […]}
     POST /v1/result    {sid, cmd, ok, error}                          a command's outcome
+    POST /v1/type      {sid, cmd}                                     keystrokes for an app_set
+                                                                      (box emptied) -> {ok}
     POST /v1/ask       {sid, what, tool, input, suggestions}          blocks until the knob answers
     POST /v1/bye       {sid}
 
-Commands for a session: {t:"set", key, value} | {t:"interrupt"} | {t:"prompt", text} | {t:"fill", text}.
+Commands for a session: {t:"set", key, value} | {t:"app_set", key, value} | {t:"interrupt"} |
+{t:"prompt", text} | {t:"fill", text}. app_set (effort in the desktop app): the mod
+empties the prompt box, asks /v1/type for the app's own command, puts the draft back.
 `/v1/ask` answers in the shape the mod returns to Claude Code:
     what=permission -> {decision}  (PermissionRequest decision, or null)
     what=question   -> {answers}   (AskUserQuestion answers, or null)
@@ -212,7 +216,7 @@ class ModRegistry:
         if s is None:
             return False
         s.commands.append(cmd)
-        if cmd.get("t") == "set":
+        if cmd.get("t") in ("set", "app_set"):
             s.pending[cmd["key"]] = cmd["value"]
         s.wake.set()
         return True
@@ -231,7 +235,7 @@ class ModRegistry:
     def result(self, body: dict) -> None:
         s = self.get(str(body["sid"]))
         cmd = body.get("cmd") or {}
-        if cmd.get("t") == "set":
+        if cmd.get("t") in ("set", "app_set"):
             s.pending.pop(cmd.get("key"), None)
             if body.get("ok") and cmd.get("key") in ("model", "effort", "mode", "fast"):
                 setattr(s, cmd["key"], cmd["value"])
@@ -375,6 +379,13 @@ class ModServer:
         if path == "/v1/result":
             reg.result(body)
             return 200, {"ok": True}
+        if path == "/v1/type":
+            reg.get(body["sid"])
+            typer = getattr(self.hub.adapter, "type_app", None)
+            cmd = body.get("cmd") if isinstance(body.get("cmd"), dict) else {}
+            # osascript takes a second or two: off the loop.
+            ok = typer is not None and await asyncio.to_thread(typer, body["sid"], cmd)
+            return 200, {"ok": bool(ok)}
         if path == "/v1/bye":
             reg.bye(body["sid"])
             return 200, {"ok": True}

@@ -8,9 +8,11 @@ the desktop app has an outside API for this.
   Ctrl+Y); /model, /effort and /fast run immediately even mid-turn. Mode:
   Shift+Tab as often as the cycle needs. Interrupt: Esc.
 * Desktop app: bring it to the front and use its menus (Cmd+Shift+I model,
-  Cmd+Shift+E effort, Cmd+Shift+M mode, then a digit), Esc to stop. No text is
-  typed, so a draft in the prompt box stays. It acts on the session that is
-  showing — the app has no way to pick a session from outside.
+  Cmd+Shift+M mode, then a digit), Esc to stop. Effort: the app's own /effort
+  typed into the prompt box (its picker follows; the engine's /effort from the
+  mod does not move it) — only with the mod, which empties the box first and
+  puts the draft back afterwards. It acts on the session that is showing — the
+  app has no way to pick a session from outside.
 
 Needs the Accessibility permission (System Settings > Privacy & Security >
 Accessibility) for whatever runs the bridge. Off unless ``control = keys`` is
@@ -36,11 +38,10 @@ EFFORTS = ("low", "medium", "high", "xhigh", "max")
 CLI_MODE_CYCLE = ("default", "acceptEdits", "plan", "auto")
 
 # Desktop menus: item order -> digit. Defaults from the docs' order; check them
-# in the app and override in the config (desktop_models / desktop_efforts /
-# desktop_modes = comma-separated, in menu order).
+# in the app and override in the config (desktop_models / desktop_modes =
+# comma-separated, in menu order).
 # Checked in the app (2026-10-16): Opus, Sonnet, Fable, Haiku.
 DESKTOP_MODELS = ("opus", "sonnet", "fable", "haiku")
-DESKTOP_EFFORTS = EFFORTS
 # Checked in the app (2026-10-16): Auto, Manual, Accept edits, Plan; bypass
 # permissions is a separate switch, not an item.
 DESKTOP_MODES = ("auto", "default", "acceptEdits", "plan")
@@ -142,7 +143,9 @@ def plan_set(target: Target, key: str, value, current: dict, cfg: dict | None = 
                 return Plan(focus, keys[-1:], activate=False)
             return Plan(focus, keys)
         if key == "effort":
-            return Plan(focus, _menu("e", _order(cfg, "desktop_efforts", DESKTOP_EFFORTS), str(value)))
+            # Cmd+Shift+E is the model popup, not an effort menu. The typed
+            # /effort (plan_app_effort) needs the mod to keep the draft.
+            raise Unsupported("effort in the desktop app only with the mod")
         if key == "mode":
             # Never from the knob: it would stop every permission question.
             if value == "bypassPermissions":
@@ -156,6 +159,16 @@ def plan_set(target: Target, key: str, value, current: dict, cfg: dict | None = 
         if key == "fast":
             raise Unsupported("the desktop app has no shortcut for fast mode")
     raise Unsupported(f"{key} for {target.kind}")
+
+
+def plan_app_effort(value: str) -> Plan:
+    """The desktop app's own /effort, typed into the (emptied) prompt box: the
+    slash menu lists it above the engine's command of the same name, so Return
+    runs the app's, which also moves the picker under the input field."""
+    if value not in EFFORTS:
+        raise Unsupported(f"effort {value!r} not allowed")
+    return Plan(("desktop",), [("text", f"/effort {value}"), ("delay", 0.8),
+                               ("code", KEY_RETURN, ()), ("delay", 0.3)])
 
 
 MENU_LETTERS = {"mode": "m", "model": "i"}
@@ -306,6 +319,16 @@ class KeystrokeAdapter:
             return False
         return self._do(f"{key}={value} for {session.label}", plan)
 
+    def app_effort(self, value: str, label: str = "") -> bool:
+        """The desktop app's own /effort in the session that is showing; the
+        caller (the mod) has emptied the prompt box."""
+        try:
+            plan = plan_app_effort(value)
+        except Unsupported as e:
+            self.log(f"control: effort={value} for {label} not done: {e}")
+            return False
+        return self._do(f"/effort {value} in the app for {label}", plan)
+
     def menu(self, session, key: str, open_: bool) -> bool:
         if not open_ and self.menu_open != key:
             return True          # nothing of ours is open
@@ -394,8 +417,22 @@ class ModAdapter:
         if key == "model" and not valid_model(str(value)) or key == "effort" and value not in EFFORTS:
             self.log(f"control: {key}={value!r} not allowed")
             return False
+        if key == "effort" and desktop and hasattr(self.fallback, "app_effort"):
+            # The app's own /effort, so the picker under the input field
+            # follows: the mod empties the box, asks for the keystrokes
+            # (type_app) and puts the draft back.
+            return self.registry.queue(session.sid, {"t": "app_set", "key": key, "value": value})
         return self.registry.queue(session.sid, {"t": "set", "key": key,
                                                  "value": bool(value) if key == "fast" else value})
+
+    def type_app(self, sid: str, cmd: dict) -> bool:
+        """The keystrokes of an ``app_set`` the mod is carrying out (its prompt
+        box emptied). Only what the bridge itself queued for that session."""
+        s = self.registry.sessions.get(sid)
+        if (s is None or self.fallback is None or cmd.get("key") != "effort"
+                or s.pending.get("effort") != cmd.get("value")):
+            return False
+        return self.fallback.app_effort(str(cmd["value"]), s.title or sid[:8])
 
     def prompt(self, session, text: str) -> bool:
         """A transcript from the knob's push-to-talk, as a prompt in the session."""

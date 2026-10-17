@@ -41,12 +41,23 @@ def test_full_model_ids_allowed():
 
 
 def test_desktop_uses_menus_not_text():
-    plan = c.plan_set(DESK, "effort", "high", {})
+    plan = c.plan_set(DESK, "mode", "plan", {})
     assert plan.focus == ("desktop",)
-    assert plan.keys[0] == ("char", "e", ("command", "shift"))
-    assert plan.keys[-1] == ("code", 20, ())
+    assert plan.keys[0] == ("char", "m", ("command", "shift"))
+    assert plan.keys[-1] == ("code", 21, ())
     assert not any(k[0] == "text" for k in plan.keys)
-    assert c.plan_set(DESK, "mode", "plan", {}).keys[-1] == ("code", 21, ())
+
+
+def test_desktop_effort_is_the_apps_typed_command_and_only_with_the_mod():
+    # Cmd+Shift+E is the model popup: never used for effort.
+    with pytest.raises(c.Unsupported):
+        c.plan_set(DESK, "effort", "high", {})
+    plan = c.plan_app_effort("high")
+    assert plan.focus == ("desktop",) and plan.activate
+    assert plan.keys[0] == ("text", "/effort high")
+    assert ("code", c.KEY_RETURN, ()) in plan.keys
+    with pytest.raises(c.Unsupported):
+        c.plan_app_effort("high\n/clear")
 
 
 def test_desktop_menu_order_from_config():

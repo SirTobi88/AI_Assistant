@@ -166,3 +166,38 @@ test('a voice text to edit goes into the prompt box, after what is typed', async
   expect(fills[0].mode).toBe('append')
   expect(seen.find(s => s.path === '/v1/result').body.ok).toBe(true)
 })
+
+test('effort in the desktop app: box emptied, keystrokes asked for, draft put back', async ($, on) => {
+  const seen: any[] = []
+  const fills: any[] = []
+  fakeSession(on)
+  let polls = 0
+  fakeBridge(on, {
+    '/v1/hello': { ok: true }, '/v1/state': { ok: true }, '/v1/result': { ok: true },
+    '/v1/type': () => ({ ok: fills.length === 1 && fills[0].text === '' }),
+    '/v1/commands': () => (polls++ === 0 ? { commands: [{ t: 'app_set', key: 'effort', value: 'high' }] } : null),
+  }, seen)
+  on('prompt.read', () => ({ value: { text: 'Entwurf', cursor: 7 } }))
+  on('prompt.fill', ($: any, e: any) => { fills.push(e); return { isFilled: true } })
+  await start($)
+  for (let i = 0; i < 200 && !seen.some(s => s.path === '/v1/result'); i++) await new Promise(r => setTimeout(r, 5))
+  expect(seen.find(s => s.path === '/v1/type').body.cmd.value).toBe('high')
+  expect(fills.map(f => f.text)).toEqual(['', 'Entwurf'])
+  expect(seen.find(s => s.path === '/v1/result').body.ok).toBe(true)
+})
+
+test('effort in the desktop app: no box, no keystrokes', async ($, on) => {
+  const seen: any[] = []
+  fakeSession(on)
+  let polls = 0
+  fakeBridge(on, {
+    '/v1/hello': { ok: true }, '/v1/state': { ok: true }, '/v1/result': { ok: true }, '/v1/type': { ok: true },
+    '/v1/commands': () => (polls++ === 0 ? { commands: [{ t: 'app_set', key: 'effort', value: 'high' }] } : null),
+  }, seen)
+  on('prompt.read', () => ({ value: { text: '', cursor: 0 } }))
+  on('prompt.fill', () => ({ isFilled: false }))
+  await start($)
+  for (let i = 0; i < 200 && !seen.some(s => s.path === '/v1/result'); i++) await new Promise(r => setTimeout(r, 5))
+  expect(seen.some(s => s.path === '/v1/type')).toBe(false)
+  expect(seen.find(s => s.path === '/v1/result').body.ok).toBe(false)
+})

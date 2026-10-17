@@ -87,12 +87,12 @@ chime = off
 # ---- AI Knob: control sessions from the knob -----------------------------
 # Model, reasoning, mode, fast and stop are carried out by typing into the
 # session (there is no outside API): Terminal.app tab found by its tty, or the
-# desktop app's menus (acts on the session that is showing). Needs the
+# desktop app's menus and its own /effort (acts on the session that is
+# showing; effort there only with the mod, which keeps the draft). Needs the
 # Accessibility permission for the app that runs the bridge.
 #   control = keys      # off by default
 #
-# Desktop menu order (Cmd+Shift+I / E / M, items picked by digit). Check the
+# Desktop menu order (Cmd+Shift+I / M, items picked by digit). Check the
 # order in your app and correct it here if it differs:
 #   desktop_models  = default, fable, opus, sonnet, haiku
-#   desktop_efforts = low, medium, high, xhigh, max
 #   desktop_modes   = default, acceptEdits, plan, auto, bypassPermissions

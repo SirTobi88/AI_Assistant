@@ -54,3 +54,10 @@ Session der Desktop-App. Typen: `plugin-authoring/types/claude-code.d.ts` des Bu
   Tab/Pfeiltasten erreichbar → bewusst nicht nachgebaut (nicht stabil).
 - Reasoning vom Knob bleibt `/effort` im Mod: wirkt auf die Engine, die Anzeige unter dem
   Eingabefeld bleibt auf dem alten Wert.
+- Das Slash-Menü der App listet `effort` zweimal: oben den eigenen Befehl der App, darunter
+  „effort – Custom command“ = der Befehl der Engine (den `$.command.run` auslöst). `/effort high`
+  ins Eingabefeld getippt + Return nimmt den oberen: Effort der App (`get_session`) low → high,
+  im Transkript der Engine kein `/effort`. Daher (mit `control = keys`): Mod leert das Feld
+  (`$.prompt.fill('')`), Bridge tippt (`/v1/type`), Mod setzt den Entwurf zurück.
+- `osascript`-Tastendrücke gehen nur aus dem Terminal-Panel der App (dort läuft die Bridge),
+  nicht aus der Sandbox der Bash-Tools und nicht aus Terminal.app (beide: Fehler 1002).

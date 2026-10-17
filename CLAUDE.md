@@ -73,7 +73,9 @@
   `sessionId`, `title`) → Sidebar-Titel statt Ordnername, und `host_id` auch ohne neues Plugin.
 - Modell vom Knob (Desktop, `control = keys`): Menü der App Cmd+Shift+I + Ziffer (Opus, Sonnet,
   Fable, Haiku), damit auch die Auswahl unter dem Eingabefeld wechselt; das Menü geht wie beim Modus schon beim Öffnen der Auswahl am Knob auf; `/model` aus dem Mod ändert
-  nur die Engine. CLI und Tastenkürzel aus: weiter `/model` im Mod. Tasten an die Desktop-App gehen
+  nur die Engine. CLI und Tastenkürzel aus: weiter `/model` im Mod. Reasoning (Desktop, `control = keys`): der
+  eigene `/effort` der App, getippt (Cmd+Shift+E ist das Modell-Popup); der Mod leert vorher das
+  Eingabefeld und setzt den Entwurf danach zurück (`app_set` → `/v1/type`). Tasten an die Desktop-App gehen
   immer über den globalen Tastenstrom (nicht `tell process`).
 - Spracheingabe: Halten am Knob (im Menü und auf der Übersicht, max. 2 min) nimmt über das PDM-Mikro auf (GPIO 45/46, I2S0,
   `boards/waveshare_knob_18/mic.cpp`), `voice.cpp` packt IMA-ADPCM-Rahmen (`adpcm.c`) aufs
