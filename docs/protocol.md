@@ -34,6 +34,10 @@ Knob → Bridge nutzt dieselbe Stückelung auf TX, falls eine Nachricht die MTU 
 
 ## Bridge → Knob
 
+Die alte Limit-Payload (ohne `t`) trägt zusätzlich `"as":"a1b2"`: die Session (gekürzte ID)
+hinter `"a":"allow"` bzw. `"done"`. Der Knob zeigt dann nach 5 s Animation unten „Zur Session“;
+Tipp → `switch` mit dieser ID (die Bridge holt die Session auch am Mac nach vorn).
+
 ### `sessions` — Liste und aktive Session
 ```json
 {"t":"sessions","act":"a1b2","ss":[

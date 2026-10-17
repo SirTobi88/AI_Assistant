@@ -944,6 +944,58 @@ static void ask_frame_tick(void) {
     lv_obj_set_style_border_opa(ask_frame, opa, 0);
 }
 
+// "Zur Session" along the bottom edge: a session needs you or it is your
+// turn. The buddy plays first; the button follows JUMP_DELAY_MS later, on the
+// usage screen and the splash alike (the app's views are closed).
+#define JUMP_DELAY_MS 5000
+static lv_obj_t* jump_btn = nullptr;
+static char      jump_key[48];          // anim + sid the current wait is for
+static uint32_t  jump_since = 0;
+static bool      jump_used = false;     // tapped (or gone) for this key
+
+static void jump_cb(lv_event_t* e) {
+    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    proto_send_switch(usage.anim_sid);  // the bridge also opens it on the Mac
+    jump_used = true;
+    lv_obj_add_flag(jump_btn, LV_OBJ_FLAG_HIDDEN);
+    idle_note_activity();
+}
+
+static void jump_create(void) {
+    jump_btn = lv_button_create(lv_layer_top());
+    lv_obj_set_size(jump_btn, 200, 52);
+    lv_obj_align(jump_btn, LV_ALIGN_BOTTOM_MID, 0, -40);
+    lv_obj_set_style_radius(jump_btn, 26, 0);
+    lv_obj_set_style_bg_color(jump_btn, lv_color_hex(COL_NEEDS_YOU), 0);
+    lv_obj_set_style_shadow_width(jump_btn, 0, 0);
+    lv_obj_t* l = lv_label_create(jump_btn);
+    lv_label_set_text(l, "Zur Session");
+    lv_obj_set_style_text_font(l, &font_styrene_20, 0);
+    lv_obj_set_style_text_color(l, lv_color_hex(0xffffff), 0);
+    lv_obj_center(l);
+    lv_obj_add_event_cb(jump_btn, jump_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_flag(jump_btn, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void jump_tick(void) {
+    if (!jump_btn) return;
+    const bool wants = connected && usage.anim_sid[0] &&
+                       (!strcmp(usage.anim, "allow") || !strcmp(usage.anim, "done"));
+    char key[sizeof(jump_key)];
+    snprintf(key, sizeof(key), "%s|%s", wants ? usage.anim : "", wants ? usage.anim_sid : "");
+    if (strcmp(key, jump_key)) {          // new state or new session: wait again
+        snprintf(jump_key, sizeof(jump_key), "%s", key);
+        jump_since = millis();
+        jump_used = false;
+    }
+    const bool show = wants && !jump_used && view == V_CLOSED && !ptt_on && !rec_waiting &&
+                      millis() - jump_since >= JUMP_DELAY_MS;
+    if (show == lv_obj_has_flag(jump_btn, LV_OBJ_FLAG_HIDDEN)) {
+        if (show) { lv_obj_remove_flag(jump_btn, LV_OBJ_FLAG_HIDDEN); lv_obj_move_foreground(jump_btn); }
+        else      lv_obj_add_flag(jump_btn, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
 // ---------------------------------------------------------------- public
 
 void app_init(void) {
@@ -960,6 +1012,7 @@ void app_init(void) {
     rec_create();
     stt_create();
     ask_frame_create();
+    jump_create();
     lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
 }
 
@@ -1049,7 +1102,7 @@ void app_tick(void) {
         if (view != V_CLOSED) show_hint("keine Antwort vom Mac");
     }
     static uint32_t last_frame_ms = 0;
-    if (millis() - last_frame_ms >= 40) { last_frame_ms = millis(); ask_frame_tick(); }
+    if (millis() - last_frame_ms >= 40) { last_frame_ms = millis(); ask_frame_tick(); jump_tick(); }
     if (notice_until && (int32_t)(millis() - notice_until) >= 0) {
         notice_until = 0;
         lv_obj_add_flag(notice_box, LV_OBJ_FLAG_HIDDEN);

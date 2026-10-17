@@ -136,6 +136,7 @@ static bool parse_json(const char* json, UsageData* out) {
     out->period_days = doc["pd"] | 30;
     strlcpy(out->reset_date, doc["rd"] | "", sizeof(out->reset_date));
     strlcpy(out->anim, doc["a"] | "", sizeof(out->anim));
+    strlcpy(out->anim_sid, doc["as"] | "", sizeof(out->anim_sid));
     // Absent (aelterer Host) → aus, also Logo wie bisher.
     out->corner_anim = doc["ua"].as<bool>();
     // Absent (aelterer Host) → 0, also Usage-Screen wie bisher.

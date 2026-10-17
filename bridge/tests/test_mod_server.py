@@ -457,3 +457,13 @@ def test_hub_sends_a_notice_when_the_adapter_cannot_set():
     asyncio.run(go())
     notices = [m["tx"] for m in sent if m.get("t") == "notice"]
     assert notices == ["nicht ausgeführt", "Stopp nicht ausgeführt"]
+
+
+def test_anim_source_names_the_session():
+    reg = ms.ModRegistry(log=lambda m: None)
+    assert reg.anim_source() is None
+    reg.report({"sid": "a", "state": protocol.THINKING})
+    reg.report({"sid": "b", "state": protocol.DONE})
+    assert reg.anim_source() == ("work think", "a")
+    reg.report({"sid": "b", "state": protocol.ASKING})
+    assert reg.anim_source() == ("allow", "b")

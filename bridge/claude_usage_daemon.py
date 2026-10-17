@@ -25,7 +25,7 @@ from bleak import BleakClient
 from bleak.exc import BleakError
 
 try:
-    from . import knob_activity, codex_limits, control, desktop_sessions, mod_server, monitor, sessions, virtual_knob, voice
+    from . import knob_activity, codex_limits, control, desktop_sessions, mod_server, monitor, protocol, sessions, virtual_knob, voice
     from .hub import Hub
     from .link import KnobLink
 except ImportError:  # run as a script, not as the daemon package
@@ -35,6 +35,7 @@ except ImportError:  # run as a script, not as the daemon package
     import desktop_sessions
     import mod_server
     import monitor
+    import protocol
     import sessions
     import virtual_knob
     import voice
@@ -455,6 +456,13 @@ def add_activity_fields(payload: dict) -> str | None:
         order = knob_activity._PRIORITY
         anim = min(anim, from_mods, key=lambda a: order.index(a) if a in order else len(order))
     payload["a"] = anim
+    # The session behind "needs you" / "your turn", so the knob can offer to
+    # jump there (protocol.short_sid, like everywhere on the knob).
+    src = MODS.anim_source()
+    if src and src[0] == anim and anim in ("allow", "done"):
+        payload["as"] = protocol.short_sid(src[1])
+    else:
+        payload.pop("as", None)
     payload["sm"] = _SCREEN_MODES[opts["screen_mode"]]
     payload["ua"] = opts["corner_buddy"] == "on"
     if opts["state_sounds"] == "on":

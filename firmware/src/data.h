@@ -28,6 +28,7 @@ struct UsageData {
     char reset_date[12];     // formatted reset date e.g. "Jul 1" (Enterprise)
     char anim[24];           // splash animation the host wants shown ("" = host
                              // has no opinion, device picks by usage rate)
+    char anim_sid[16];       // session behind "allow" / "done" (short id), "" = none
     bool corner_anim;        // show the buddy small in the usage screen's corner
                              // instead of the logo; false unless the host asks
     int  screen_mode;        // 0 = always usage, 1 = always buddy, 2 = show the

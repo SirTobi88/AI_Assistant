@@ -172,6 +172,12 @@ class ModRegistry:
     def anim(self, now: float | None = None) -> str | None:
         """The buddy/state-sound name (knob_activity's vocabulary) for all mod
         sessions together; None without any."""
+        a = self.anim_source(now)
+        return a[0] if a else None
+
+    def anim_source(self, now: float | None = None) -> tuple[str, str] | None:
+        """(anim, sid): the animation and the session it comes from (the most
+        recently active of those with that state)."""
         views = self.views(now)
         if not views:
             return None
@@ -179,7 +185,8 @@ class ModRegistry:
         name = {protocol.NEEDS_PERMISSION: "allow", protocol.ASKING: "allow",
                 protocol.TOOL: "work coding", protocol.THINKING: "work think",
                 protocol.COMPACTING: "work think", protocol.DONE: "done"}
-        return min((name.get(v.state, "expression sleep") for v in views), key=order.index)
+        return min(((name.get(v.state, "expression sleep"), v.sid) for v in views),
+                   key=lambda a: order.index(a[0]))
 
     def take_new_focus(self) -> str | None:
         """The session a prompt was typed in since the last call, if any: the
