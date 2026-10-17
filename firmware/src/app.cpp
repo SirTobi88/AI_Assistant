@@ -910,6 +910,40 @@ static void overlay_event_cb(lv_event_t* e) {
     }
 }
 
+// A pulsing blue frame along the round edge while a question is up, so it
+// stands out from the menu.
+#define ASK_FRAME_COL   0x3b82f6
+#define ASK_FRAME_W     10
+#define ASK_PULSE_MS    1400
+static lv_obj_t* ask_frame = nullptr;
+
+static void ask_frame_create(void) {
+    ask_frame = lv_obj_create(overlay);
+    lv_obj_remove_style_all(ask_frame);
+    lv_obj_set_size(ask_frame, LV_PCT(100), LV_PCT(100));
+    lv_obj_center(ask_frame);
+    lv_obj_set_style_radius(ask_frame, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_border_color(ask_frame, lv_color_hex(ASK_FRAME_COL), 0);
+    lv_obj_set_style_border_width(ask_frame, ASK_FRAME_W, 0);
+    lv_obj_remove_flag(ask_frame, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(ask_frame, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void ask_frame_tick(void) {
+    if (!ask_frame) return;
+    const bool on = view == V_PROMPT;
+    if (on != !lv_obj_has_flag(ask_frame, LV_OBJ_FLAG_HIDDEN)) {
+        if (on) { lv_obj_remove_flag(ask_frame, LV_OBJ_FLAG_HIDDEN); lv_obj_move_foreground(ask_frame); }
+        else    lv_obj_add_flag(ask_frame, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (!on) return;
+    // Triangle wave between 25 % and 100 % opacity.
+    uint32_t t = millis() % ASK_PULSE_MS;
+    uint32_t tri = t < ASK_PULSE_MS / 2 ? t : ASK_PULSE_MS - t;          // 0 .. PULSE/2
+    lv_opa_t opa = (lv_opa_t)(64 + tri * (255 - 64) / (ASK_PULSE_MS / 2));
+    lv_obj_set_style_border_opa(ask_frame, opa, 0);
+}
+
 // ---------------------------------------------------------------- public
 
 void app_init(void) {
@@ -925,6 +959,7 @@ void app_init(void) {
     ring = ring_create(overlay);
     rec_create();
     stt_create();
+    ask_frame_create();
     lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
 }
 
@@ -1013,6 +1048,8 @@ void app_tick(void) {
         rec_wait_end();          // no transcript: bridge gone or Whisper stuck
         if (view != V_CLOSED) show_hint("keine Antwort vom Mac");
     }
+    static uint32_t last_frame_ms = 0;
+    if (millis() - last_frame_ms >= 40) { last_frame_ms = millis(); ask_frame_tick(); }
     if (notice_until && (int32_t)(millis() - notice_until) >= 0) {
         notice_until = 0;
         lv_obj_add_flag(notice_box, LV_OBJ_FLAG_HIDDEN);
