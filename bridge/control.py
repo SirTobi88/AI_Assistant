@@ -142,10 +142,7 @@ def plan_set(target: Target, key: str, value, current: dict, cfg: dict | None = 
                 return Plan(focus, keys[-1:], activate=False)
             return Plan(focus, keys)
         if key == "effort":
-            keys = _menu("e", _order(cfg, "desktop_efforts", DESKTOP_EFFORTS), str(value))
-            if current.get("menu_open"):
-                return Plan(focus, keys[-1:], activate=False)
-            return Plan(focus, keys)
+            return Plan(focus, _menu("e", _order(cfg, "desktop_efforts", DESKTOP_EFFORTS), str(value)))
         if key == "mode":
             # Never from the knob: it would stop every permission question.
             if value == "bypassPermissions":
@@ -161,7 +158,7 @@ def plan_set(target: Target, key: str, value, current: dict, cfg: dict | None = 
     raise Unsupported(f"{key} for {target.kind}")
 
 
-MENU_LETTERS = {"mode": "m", "model": "i", "effort": "e"}
+MENU_LETTERS = {"mode": "m", "model": "i"}
 
 
 def plan_menu(target: Target, key: str, open_: bool) -> Plan:
@@ -376,11 +373,11 @@ class ModAdapter:
         if not self.registry.has(session.sid):
             return self._fallback("set", session, key, value)
         desktop = self.registry.sessions[session.sid].entrypoint == "claude-desktop"
-        if key in ("model", "effort") and desktop and self.fallback is not None:
-            # The app's menus: /model and /effort from the mod change the
-            # engine but not the pickers under the input field.
-            if not (valid_model(str(value)) if key == "model" else value in EFFORTS):
-                self.log(f"control: {key}={value!r} not allowed")
+        if key == "model" and desktop and self.fallback is not None:
+            # The app's model menu: /model from the mod changes the engine
+            # but not the picker under the input field.
+            if not valid_model(str(value)):
+                self.log(f"control: model={value!r} not allowed")
                 return False
             return self._fallback("set", session, key, value)
         if key == "mode":

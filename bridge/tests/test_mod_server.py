@@ -284,9 +284,6 @@ def test_desktop_model_goes_to_the_app_menu_when_keys_are_on():
     assert a.set(protocol.Session("t", "y"), "model", "sonnet") and reg.sessions["t"].commands[-1]["key"] == "model"
     assert control.ModAdapter(reg, None, log=lambda m: None).set(protocol.Session("d", "x"), "model", "opus")
     assert reg.sessions["d"].commands[-1] == {"t": "set", "key": "model", "value": "opus"}
-    # reasoning the same way: the app's menu, so its picker shows it too
-    assert a.set(protocol.Session("d", "x"), "effort", "high") and calls[-1] == ("effort", "high")
-    assert not a.set(protocol.Session("d", "x"), "effort", "turbo")
 
 
 def test_a_reset_window_reads_as_unused():

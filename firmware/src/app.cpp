@@ -591,9 +591,7 @@ static void activate(bool confirmed) {
     case A_MODEL:     if (!s) { show_hint(need_sess); break; } pick_key = "model";  open_view(V_PICK);
                       open_app_menu(s->sid, "model");
                       break;
-    case A_EFFORT:    if (!s) { show_hint(need_sess); break; } pick_key = "effort"; open_view(V_PICK);
-                      open_app_menu(s->sid, "effort");
-                      break;
+    case A_EFFORT:    if (!s) { show_hint(need_sess); break; } pick_key = "effort"; open_view(V_PICK); break;
     case A_MODE:      if (!s) { show_hint(need_sess); break; } pick_key = "mode";   open_view(V_PICK);
                       open_app_menu(s->sid, "mode");
                       break;
