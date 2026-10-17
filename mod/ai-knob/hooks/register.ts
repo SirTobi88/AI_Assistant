@@ -118,7 +118,8 @@ async function runCommand($: EngineInterface, cmd: any): Promise<void> {
         error = 'no turn running'
       }
     } else if (cmd.t === 'prompt' && typeof cmd.text === 'string' && cmd.text) {
-      await $.prompt.submit({ text: cmd.text })
+      // The person's own spoken words: bare, without the plugin frame.
+      await $.prompt.submit({ text: cmd.text, asUser: true })
     } else {
       ok = false
       error = `unknown command ${JSON.stringify(cmd)}`

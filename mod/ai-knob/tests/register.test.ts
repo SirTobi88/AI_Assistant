@@ -131,3 +131,20 @@ test('a prompt typed in the session tells the bridge to follow it', async ($, on
   for (let i = 0; i < 200 && !seen.some(s => s.body?.prompted === true); i++) await new Promise(r => setTimeout(r, 5))
   expect(seen.some(s => s.path === '/v1/state' && s.body.prompted === true)).toBe(true)
 })
+
+test('a voice prompt from the knob goes in as the person\'s own words', async ($, on) => {
+  const seen: any[] = []
+  const prompts: any[] = []
+  fakeSession(on)
+  let polls = 0
+  fakeBridge(on, {
+    '/v1/hello': { ok: true }, '/v1/state': { ok: true }, '/v1/result': { ok: true },
+    '/v1/commands': () => (polls++ === 0 ? { commands: [{ t: 'prompt', text: 'Lass die Tests laufen' }] } : null),
+  }, seen)
+  on('prompt.submit', ($: any, e: any) => { prompts.push(e); return { drop: 'test' } })
+  await start($)
+  for (let i = 0; i < 200 && !seen.some(s => s.path === '/v1/result'); i++) await new Promise(r => setTimeout(r, 5))
+  expect(prompts[0].text).toBe('Lass die Tests laufen')
+  // no "The ai-knob plugin sent a message" frame around it
+  expect(prompts[0].origin.asUser).toBe(true)
+})
