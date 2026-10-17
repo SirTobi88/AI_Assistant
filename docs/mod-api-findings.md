@@ -66,3 +66,8 @@ Session der Desktop-App. Typen: `plugin-authoring/types/claude-code.d.ts` des Bu
   Cmd+Shift+M + Ziffer.
 - `osascript`-Tastendrücke gehen nur aus dem Terminal-Panel der App (dort läuft die Bridge),
   nicht aus der Sandbox der Bash-Tools und nicht aus Terminal.app (beide: Fehler 1002).
+
+## `/plan` der Desktop-App (getippt)
+
+- Ohne Argument wählt das erste Return `/plan` nur im Slash-Menü aus; erst das zweite führt es aus.
+- `/plan` in einer Session, die schon im Plan-Modus ist, lässt sie im Plan-Modus (kein Umschalten).

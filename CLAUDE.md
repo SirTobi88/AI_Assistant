@@ -62,7 +62,9 @@
 - Modus vom Knob: nur „Plan-Modus“ (ein Eintrag, keine Auswahl; zurück auf Auto geht's beim
   Annehmen des Plans). Desktop mit Mod und `control = keys`: die eigene `/plan` der App, getippt
   (`app_set` key `mode`, wie `/effort`). Ohne Mod: Menü Cmd+Shift+M + Ziffer (Tastencode); CLI:
-  Shift+Tab-Zyklus. Andere Modi lehnt `ModAdapter.set` ab, `bypassPermissions` setzt der Knob nie.
+  Shift+Tab-Zyklus. Tipp schickt immer `/plan` (Modus kennt der Knob erst nach dem nächsten Prompt;
+  Zurückstellen in der App sieht er nicht); `/plan` im Plan-Modus bleibt dort (getestet). Zwei Return:
+  das erste wählt `/plan` im Slash-Menü, das zweite führt aus. Andere Modi lehnt `ModAdapter.set` ab, `bypassPermissions` setzt der Knob nie.
   Der Knob folgt der Session mit dem letzten Prompt (Mod meldet `prompted`/`prompted_at`).
 - Session wechseln vom Knob (Desktop): der Mod meldet `CLAUDE_CODE_HOST_SESSION_ID` (`local_…`, die
   ID der App, nicht die CLI-Session-ID) als `host_id`; die Bridge öffnet
