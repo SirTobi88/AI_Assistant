@@ -211,7 +211,9 @@ static void build_main(int focus) {
     item(n++, "Sessions", s ? s->label : "keine aktiv", 0, A_SESSIONS);
     item(n++, "Modell", s && *s->model ? s->model : "-", 0, A_MODEL);
     item(n++, "Reasoning", s && *s->effort ? s->effort : "-", 0, A_EFFORT);
-    item(n++, "Plan-Modus", !s ? "-" : !strcmp(s->mode, "plan") ? "aktiv" : "wechseln", 0, A_MODE);
+    // No state shown: the knob only learns the mode with the next prompt, a
+    // switch in the app back to auto stays unseen until then.
+    item(n++, "Plan-Modus", s ? "wechseln" : "-", 0, A_MODE);
     if (SHOW_FAST) item(n++, "Fast", s ? (s->fast ? "an" : "aus") : "-", 0, A_FAST);
     if (s && s->ctx_pct >= 0) snprintf(buf, sizeof(buf), "Kontext %d %%", s->ctx_pct);
     else snprintf(buf, sizeof(buf), "Limits & Status");
@@ -624,10 +626,8 @@ static void activate(bool confirmed) {
     case A_EFFORT:    if (!s) { show_hint(need_sess); break; } pick_key = "effort"; open_view(V_PICK); break;
     case A_MODE:      // only plan: auto follows when the plan is accepted
         if (!s) { show_hint(need_sess); break; }
-        if (!strcmp(s->mode, "plan")) { show_hint("schon aktiv"); break; }
-        snprintf(s->mode, sizeof(s->mode), "plan");   // optimistic; the next sessions message confirms
-        proto_send_set(s->sid, "mode", "plan");
-        build(V_MAIN, f);
+        proto_send_set(s->sid, "mode", "plan");      // always: s->mode may be stale
+        show_hint("/plan gesendet");
         break;
     case A_MONITOR:   open_view(V_MONITOR); break;
     case A_BRIGHT:    open_view(V_BRIGHT); break;
