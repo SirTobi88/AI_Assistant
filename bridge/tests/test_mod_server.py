@@ -341,3 +341,19 @@ def test_desktop_titles_name_the_sessions_and_give_the_app_id(tmp_path):
     ran = []
     assert control.ModAdapter(reg, log=lambda m: None, run=ran.append).switch(protocol.Session("a", "x"))
     assert ran == [["open", f"claude://claude.ai/epitaxy/{hid}"]]
+
+
+def test_sessions_come_most_recently_active_first(tmp_path):
+    from bridge.desktop_sessions import DesktopSessions
+    d = tmp_path / "acct" / "org"
+    d.mkdir(parents=True)
+    for cli, last in (("old", 1_000_000), ("recent", 9_000_000)):
+        (d / f"local_{cli}.json").write_text(json.dumps(
+            {"sessionId": f"local_{cli}", "cliSessionId": cli, "title": cli, "lastActivityAt": last}))
+    reg = ms.ModRegistry(log=lambda m: None, desktop=DesktopSessions(tmp_path))
+    for sid in ("old", "recent", "cli"):
+        reg.hello({"sid": sid})
+    assert [v.sid for v in reg.views()] == ["recent", "old", "cli"]
+    # a prompt typed now beats the app's older record
+    reg.report({"sid": "old", "prompted": True})
+    assert [v.sid for v in reg.views()][0] == "old"

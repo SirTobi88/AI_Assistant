@@ -186,8 +186,13 @@ class ModRegistry:
     def views(self, now: float | None = None) -> list[protocol.Session]:
         now = time.time() if now is None else now
         self.prune(now)
-        return [s.view(now, self._desktop(s.sid).title if self._desktop(s.sid) else "")
-                for s in sorted(self.sessions.values(), key=lambda s: -s.state_ts)]
+        def last_activity(s: ModSession) -> float:
+            d = self._desktop(s.sid)
+            return max(s.prompt_ts, s.state_ts, d.last_activity if d else 0.0)
+        # Most recent activity first: the app's own record, the last prompt
+        # or the last state change the mod reported, whichever is newest.
+        return [s.view(now, d.title if (d := self._desktop(s.sid)) else "")
+                for s in sorted(self.sessions.values(), key=last_activity, reverse=True)]
 
     def _desktop(self, sid: str):
         return self.desktop.get(sid) if self.desktop is not None else None

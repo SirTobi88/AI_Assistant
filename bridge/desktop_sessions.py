@@ -20,6 +20,7 @@ REFRESH_S = 5.0
 class DesktopSession:
     host_id: str
     title: str
+    last_activity: float = 0.0      # s since the epoch, the app's lastActivityAt
 
 
 class DesktopSessions:
@@ -64,5 +65,7 @@ class DesktopSessions:
                 continue
             cli, host = d.get("cliSessionId"), d.get("sessionId")
             if isinstance(cli, str) and isinstance(host, str) and not d.get("isArchived"):
-                by_cli[cli] = DesktopSession(host, str(d.get("title") or "").strip())
+                last = d.get("lastActivityAt")
+                by_cli[cli] = DesktopSession(host, str(d.get("title") or "").strip(),
+                                             last / 1000 if isinstance(last, (int, float)) else 0.0)
         self._by_cli = by_cli

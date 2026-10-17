@@ -195,8 +195,16 @@ static void build_main(int focus) {
     ring_trim(ring, n, focus);
 }
 
+// The sids as listed on screen: the list arrives anew every second, possibly
+// reordered, so the focus and a tap go by sid, not by position.
+static char shown_sid[RING_MAX_ITEMS][PROTO_ID_LEN];
+
 static void build_sessions(int focus) {
     AppState* st = proto_state();
+    // Keep the focus on the session it was on, wherever that moved.
+    char keep[PROTO_ID_LEN] = "";
+    if (focus >= 0 && focus < RING_MAX_ITEMS && act[focus] == A_SESSION)
+        snprintf(keep, sizeof(keep), "%s", shown_sid[focus]);
     char sub[RING_LABEL_LEN];
     int n = 0;
     ring_set_count(ring, st->n_sess + 1, 0);
@@ -207,8 +215,11 @@ static void build_sessions(int focus) {
         if (active) active_idx = n;
         if (s->ctx_pct >= 0) snprintf(sub, sizeof(sub), "%s%s · %d %%", active ? "aktiv · " : "", proto_state_name(s->state), s->ctx_pct);
         else                 snprintf(sub, sizeof(sub), "%s%s", active ? "aktiv · " : "", proto_state_name(s->state));
+        if (keep[0] && !strcmp(s->sid, keep)) focus = n;
+        snprintf(shown_sid[n], PROTO_ID_LEN, "%s", s->sid);
         item(n++, s->label, sub, state_color(s->state), A_SESSION, (int16_t)i);
     }
+    if (keep[0] && focus < n && strcmp(shown_sid[focus], keep)) focus = -1;   // that session is gone
     item(n++, "Zurück", "", 0, A_BACK);
     ring_set_title(ring, st->n_sess ? "Sessions" : "keine Sessions");
     ring_set_body(ring, nullptr);
@@ -599,9 +610,10 @@ static void activate(bool confirmed) {
         break;
     case A_SESSION: {
         AppState* st = proto_state();
-        const SessRow* row = &st->sess[arg[f]];
-        snprintf(st->active, sizeof(st->active), "%s", row->sid);
-        proto_send_switch(row->sid);
+        char sid[PROTO_ID_LEN];
+        snprintf(sid, sizeof(sid), "%s", shown_sid[f]);   // the one on screen, not st->sess[i] now
+        snprintf(st->active, sizeof(st->active), "%s", sid);
+        proto_send_switch(sid);
         open_view(V_MAIN);
         break;
     }
