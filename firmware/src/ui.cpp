@@ -267,7 +267,7 @@ static void compute_layout(const BoardCaps& c) {
         // Clock up beside the battery, shifted right: the band left of it
         // is Clawd's (see the mascot below). Without a battery (Knob-1.8)
         // the clock takes the battery's place, as far right as the bezel allows.
-        L.title_y = 39;
+        L.title_y = 54;
         L.title_nudge = c.has_battery ? 52 : 64;
         L.pct_font      = &font_styrene_48;
         L.ent_pct_font  = &font_tiempos_56;
