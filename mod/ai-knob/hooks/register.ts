@@ -147,6 +147,9 @@ async function commandLoop($: EngineInterface): Promise<void> {
         greeted = (await call($, 'POST', '/v1/hello', {
           sid, title, cwd: await $.session.cwd(),
           entrypoint: (await $.env.get('CLAUDE_CODE_ENTRYPOINT')) ?? '',
+          // The desktop app's own id for this session (local_…): its link
+          // claude://claude.ai/epitaxy/<id> brings the session to the front.
+          host_id: (await $.env.get('CLAUDE_CODE_HOST_SESSION_ID')) ?? '',
           version: await $.session.version(),
         })) !== null
         if (greeted) await report($)

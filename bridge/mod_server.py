@@ -4,7 +4,7 @@ Each Claude session that runs the mod talks HTTP/1.1 to this Unix socket via
 `$.http.fetch(url, { socketPath })` — one short request per call, `Connection:
 close`, no keep-alive. Stdlib only.
 
-    POST /v1/hello     {sid, cwd, title, entrypoint, version}        register
+    POST /v1/hello     {sid, cwd, title, entrypoint, host_id, version}  register
     POST /v1/state     {sid, state, model, effort, mode, fast,        report (on events
                         ctx_pct, tokens, rate_limits}                 and every 10 s)
     GET  /v1/commands?sid=…&wait=25                                   long poll -> {commands: […]}
@@ -57,6 +57,7 @@ class ModSession:
     cwd: str = ""
     title: str = ""
     entrypoint: str = ""
+    host_id: str = ""                                 # desktop app's session id (local_…)
     state: int = protocol.IDLE
     state_ts: float = 0.0
     model: str = ""
@@ -108,7 +109,7 @@ class ModRegistry:
 
     def hello(self, body: dict) -> None:
         s = self.get(str(body["sid"]))
-        for key in ("cwd", "title", "entrypoint"):
+        for key in ("cwd", "title", "entrypoint", "host_id"):
             if body.get(key):
                 setattr(s, key, str(body[key]))
 

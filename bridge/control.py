@@ -332,6 +332,10 @@ class KeystrokeAdapter:
 MOD_MODES = ("default", "plan", "acceptEdits", "auto")
 
 
+# The desktop app's session ids, as CLAUDE_CODE_HOST_SESSION_ID carries them.
+HOST_ID_RE = re.compile(r"local_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+
+
 class ModAdapter:
     """Sessions running the ai-knob mod carry commands out themselves
     (mod_server.ModRegistry queues them); everything the mod can't do — the
@@ -341,8 +345,9 @@ class ModAdapter:
     app's own session tool, which asks on screen before a mode that does more
     without asking."""
 
-    def __init__(self, registry, fallback=None, log=print) -> None:
+    def __init__(self, registry, fallback=None, log=print, run=None) -> None:
         self.registry, self.fallback, self.log = registry, fallback, log
+        self.run = run or (lambda args: subprocess.run(args, check=False, timeout=10))
 
     def _fallback(self, what: str, session, *args) -> bool:
         if self.fallback is None:
@@ -353,8 +358,16 @@ class ModAdapter:
         return getattr(self.fallback, what)(session, *args)
 
     def switch(self, session) -> bool:
-        # Picking the knob's active session needs nothing from the session itself.
-        return True if self.registry.has(session.sid) else self._fallback("switch", session)
+        if not self.registry.has(session.sid):
+            return self._fallback("switch", session)
+        # Desktop app: open the session there too, by its own link, so the
+        # app shows (and types into) the session the knob now follows.
+        host_id = self.registry.sessions[session.sid].host_id
+        if not HOST_ID_RE.fullmatch(host_id):
+            return True
+        self.log(f"control: show {session.label} in the desktop app")
+        self.run(["open", f"claude://claude.ai/epitaxy/{host_id}"])
+        return True
 
     def set(self, session, key: str, value) -> bool:
         if not self.registry.has(session.sid):

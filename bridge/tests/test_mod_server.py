@@ -304,3 +304,18 @@ def test_anim_from_mod_sessions():
     assert reg.anim() == "work think"
     reg.report({"sid": "b", "state": protocol.NEEDS_PERMISSION})
     assert reg.anim() == "allow"
+
+
+def test_switch_shows_the_session_in_the_desktop_app():
+    reg = ms.ModRegistry(log=lambda m: None)
+    hid = "local_77d3da33-d266-432a-9855-91c08f67262f"
+    reg.hello({"sid": "a", "entrypoint": "claude-desktop", "host_id": hid})
+    reg.hello({"sid": "b", "entrypoint": "cli"})
+    reg.hello({"sid": "c", "entrypoint": "claude-desktop", "host_id": "local_x; rm -rf /"})
+    ran = []
+    a = control.ModAdapter(reg, log=lambda m: None, run=ran.append)
+    assert a.switch(protocol.Session("a", "hanse"))
+    assert ran == [["open", f"claude://claude.ai/epitaxy/{hid}"]]
+    # no desktop id, or not one: the knob follows, nothing is opened
+    assert a.switch(protocol.Session("b", "cli")) and a.switch(protocol.Session("c", "x"))
+    assert len(ran) == 1
