@@ -22,7 +22,7 @@ from pathlib import Path
 SAMPLE_RATE = 16000
 FRAME_SAMPLES = 256
 HEADER = struct.Struct("<HhB")
-MAX_SECONDS = 35                      # the knob stops at 30 s
+MAX_SECONDS = 125                     # the knob stops at 120 s
 
 STEPS = [
     7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45,

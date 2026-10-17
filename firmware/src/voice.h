@@ -6,7 +6,7 @@
 // 128 bytes = 256 samples (16 ms). Each frame carries the decoder state, so a
 // lost frame costs 16 ms, not the rest of the take.
 
-#define VOICE_MAX_MS 30000
+#define VOICE_MAX_MS 120000   // 2 min; the bridge accepts a little more (voice.MAX_SECONDS)
 
 bool voice_start(void);   // false: no microphone
 void voice_stop(void);    // sends what is left

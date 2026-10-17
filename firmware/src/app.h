@@ -21,3 +21,5 @@ void app_on_proto(void);
 void app_set_usage(const UsageData* usage);
 // Link state, so the rings can say "not connected" instead of sending into nothing.
 void app_set_connected(bool connected);
+// Push-to-talk from a hold outside the menu (the menu handles its own).
+void app_ptt(bool on);

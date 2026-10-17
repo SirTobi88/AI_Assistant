@@ -58,7 +58,7 @@ static bool        holding = false;
 static bool        hold_is_confirm = false;
 static bool        hold_fired = false;
 static bool        ptt_on = false;
-// Full-screen recording view over the ring: arc = time left of the 30 s,
+// Full-screen recording view over the ring: arc = the take so far of VOICE_MAX_MS,
 // dot = loudness, big timer. The ring's own title is far too small to see.
 static lv_obj_t*   rec_root = nullptr;
 static lv_obj_t*   rec_arc = nullptr;
@@ -553,7 +553,7 @@ static void rec_update(void) {
     lv_obj_set_size(rec_dot, d, d);
     lv_obj_align(rec_dot, LV_ALIGN_CENTER, 0, -50);
     char buf[8];
-    snprintf(buf, sizeof(buf), "0:%02u", (unsigned)(ms / 1000));
+    snprintf(buf, sizeof(buf), "%u:%02u", (unsigned)(ms / 60000), (unsigned)(ms / 1000 % 60));
     lv_label_set_text(rec_time, buf);
 }
 
@@ -582,6 +582,18 @@ static void ptt(bool on) {
         build(view, ring_focus(ring));
         show_hint("transkribiere ...");
     }
+}
+
+// Hold outside the menu (main.cpp's touch gesture): same take, the overlay
+// shown just for the recording view; the transcript then opens V_STT itself.
+void app_ptt(bool on) {
+    if (!overlay) return;
+    if (on && view == V_CLOSED) {
+        lv_obj_clear_flag(overlay, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(overlay);
+    }
+    ptt(on);
+    if (view == V_CLOSED && !ptt_on) lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
 }
 
 static void tap_timer_cb(lv_timer_t*) {
@@ -736,7 +748,7 @@ void app_set_connected(bool c) {
 }
 
 void app_tick(void) {
-    if (ptt_on && !voice_tick()) ptt(false);   // the take hit its 30 s
+    if (ptt_on && !voice_tick()) app_ptt(false);   // the take hit VOICE_MAX_MS
     if (ptt_on) {
         static uint32_t last_rec_ms = 0;
         if (millis() - last_rec_ms >= 50) { last_rec_ms = millis(); rec_update(); }

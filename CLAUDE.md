@@ -64,7 +64,7 @@
   Fable, Haiku), damit auch die Auswahl unter dem Eingabefeld wechselt; das Menü geht wie beim Modus schon beim Öffnen der Auswahl am Knob auf; `/model` aus dem Mod ändert
   nur die Engine. CLI und Tastenkürzel aus: weiter `/model` im Mod. Tasten an die Desktop-App gehen
   immer über den globalen Tastenstrom (nicht `tell process`).
-- Spracheingabe: Halten am Knob (im Menü) nimmt über das PDM-Mikro auf (GPIO 45/46, I2S0,
+- Spracheingabe: Halten am Knob (im Menü und auf der Übersicht, max. 2 min) nimmt über das PDM-Mikro auf (GPIO 45/46, I2S0,
   `boards/waveshare_knob_18/mic.cpp`), `voice.cpp` packt IMA-ADPCM-Rahmen (`adpcm.c`) aufs
   AUDIO-Merkmal `…0005`. Bridge: `bridge/voice.py` (Decoder, `Take`, whisper.cpp `whisper-cli`
   mit `~/.config/ai-knob/models/ggml-large-v3-turbo-q5_0.bin`, Konfig `whisper_cli`,

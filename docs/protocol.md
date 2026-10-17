@@ -108,7 +108,7 @@ Mehrere offene Prompts stehen in einer Warteschlange; der Knob zeigt den ältest
 Merkmal `…0005` (Notify). Rahmen: `[seq u16 LE][predictor i16 LE][index u8]` + 128 Byte
 IMA-ADPCM (4 bit, niedriges Nibble zuerst) = 256 Samples, 16 kHz mono, 16 ms. Jeder Rahmen trägt den
 Decoder-Zustand, ein verlorener Rahmen kostet nur 16 ms (Stille). `seq` beginnt bei jedem `ptt on`
-mit 0; höchstens 30 s pro Aufnahme (dann `ptt off` vom Knob). ~66 kbit/s.
+mit 0; höchstens 120 s pro Aufnahme (dann `ptt off` vom Knob). ~66 kbit/s.
 
 Ablauf: Halten → `{"t":"ptt","on":1}` + Rahmen → Loslassen `{"t":"ptt","on":0}` → Bridge
 (`bridge/voice.py`) wartet 0,3 s auf Nachzügler, transkribiert lokal mit whisper.cpp →

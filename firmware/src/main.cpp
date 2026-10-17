@@ -232,9 +232,9 @@ extern "C" void board_init(void);
 // ---- Touch as keys (BoardCaps.touch_keys) ----
 // The same three jobs the buttons do elsewhere, driven by ui.cpp's gestures:
 //   double tap          → Shift+Tab, one keystroke
-//   hold                → Space held until release (voice-mode PTT) — only
-//                         while a host is connected, there's nobody to type to
-//                         otherwise
+//   hold                → push-to-talk (app_ptt: mic -> bridge -> Whisper),
+//                         only while a host is connected. No HID Space any
+//                         more: in the desktop app it typed spaces.
 //   hold 3-6 s, release → pairing, only once the link has been down for
 //                         TOUCH_PAIR_DOWN_MS (where the hold isn't Space).
 //                         Same window as the PWR gesture: 3 s to arm,
@@ -248,7 +248,7 @@ extern "C" void board_init(void);
 #define TOUCH_PAIR_MAX_MS  6000
 #define TOUCH_PAIR_DOWN_MS 15000
 
-static bool     touch_space_down = false;
+static bool     touch_talk_down = false;
 static uint32_t ble_down_since_ms = 0;   // last time the link went down (boot = 0)
 
 static void touch_double_tap(void) {
@@ -258,8 +258,8 @@ static void touch_double_tap(void) {
 
 static void touch_hold_start(void) {
     if (ble_get_state() != BLE_STATE_CONNECTED) return;
-    ble_keyboard_press(0x2C, 0);     // HID Space, no mods
-    touch_space_down = true;
+    app_ptt(true);
+    touch_talk_down = true;
 }
 
 // Whether this hold could pair at all — the link has to be down, and down long
@@ -274,7 +274,7 @@ static bool touch_pair_eligible(void) {
 // with nothing else to go by.
 static void touch_hold_tick(uint32_t held_ms) {
     static bool announced = false;
-    if (touch_space_down) return;          // that hold is push-to-talk, not pairing
+    if (touch_talk_down) return;          // that hold is push-to-talk, not pairing
     if (!touch_pair_eligible()) {
         // Say so rather than ignoring the hold in silence: refusing to pair
         // while the link is merely mid-reconnect is deliberate, but from the
@@ -294,9 +294,9 @@ static void touch_hold_tick(uint32_t held_ms) {
 }
 
 static void touch_hold_end(uint32_t held_ms) {
-    if (touch_space_down) {
-        ble_keyboard_release();
-        touch_space_down = false;
+    if (touch_talk_down) {
+        app_ptt(false);
+        touch_talk_down = false;
         return;
     }
     // Anything already on screen — "Release and retry", "Not yet" — stays for
