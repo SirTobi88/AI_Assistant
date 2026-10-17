@@ -6,6 +6,7 @@
 #include "brightness.h"
 #include "idle.h"
 #include "theme.h"
+#include "ui.h"
 #include <Arduino.h>
 #include <lvgl.h>
 #include <stdio.h>
@@ -988,7 +989,9 @@ static void jump_tick(void) {
         jump_since = millis();
         jump_used = false;
     }
+    // Only on the big buddy: back on the overview the button goes too.
     const bool show = wants && !jump_used && view == V_CLOSED && !ptt_on && !rec_waiting &&
+                      ui_get_current_screen() == SCREEN_SPLASH &&
                       millis() - jump_since >= JUMP_DELAY_MS;
     if (show == lv_obj_has_flag(jump_btn, LV_OBJ_FLAG_HIDDEN)) {
         if (show) { lv_obj_remove_flag(jump_btn, LV_OBJ_FLAG_HIDDEN); lv_obj_move_foreground(jump_btn); }

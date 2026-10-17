@@ -404,6 +404,9 @@ static uint32_t auto_splash_started = 0;  // nur fuers Protokoll: wie lange stan
 // wird also deutlich kuerzer als die Frist laeuft. Gemessen: 5003 ms Standzeit
 // fuehlten sich wie drei an.
 #define AUTO_SPLASH_MS 6500
+// "needs you" / "your turn": longer, so app.cpp's "Zur Session" (after 5 s)
+// stays up for a while before the overview comes back.
+#define AUTO_SPLASH_JUMP_MS 15000
 static lv_image_dsc_t battery_dscs[5];  // empty, low, medium, full, charging
 
 // ---- Live-data freshness → which usage sub-view to show ----
@@ -1713,7 +1716,8 @@ void ui_set_host_anim(const char* name) {
             ui_show_screen(SCREEN_SPLASH);
             Serial.printf("auto splash: zeige %s\n", host_anim);
         }
-        auto_splash_until = millis() + AUTO_SPLASH_MS;
+        const bool jump = !strcmp(host_anim, "allow") || !strcmp(host_anim, "done");
+        auto_splash_until = millis() + (jump ? AUTO_SPLASH_JUMP_MS : AUTO_SPLASH_MS);
     }
 }
 
