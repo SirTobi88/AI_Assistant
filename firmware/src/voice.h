@@ -14,3 +14,6 @@ void voice_stop(void);    // sends what is left
 // (and has stopped itself).
 bool voice_tick(void);
 bool voice_active(void);
+uint32_t voice_elapsed_ms(void);
+// Loudness of the last frame, 0..100 (peak, log-ish), for the recording view.
+uint8_t voice_level(void);

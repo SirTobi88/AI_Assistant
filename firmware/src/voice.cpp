@@ -14,8 +14,18 @@ static uint16_t      seq = 0;
 static adpcm_state_t enc;
 static int16_t       block[FRAME_SAMPLES];
 static size_t        filled = 0;
+static uint8_t       level = 0;
 
 static void send_block(size_t n) {
+    int peak = 0;
+    for (size_t i = 0; i < n; i++) {
+        const int v = block[i] < 0 ? -block[i] : block[i];
+        if (v > peak) peak = v;
+    }
+    // ~ -48 dB .. 0 dB onto 0..100: speech sits mid-scale, silence near 0.
+    int l = 0;
+    for (int v = peak; v > 128; v >>= 1) l += 12;
+    level = l > 100 ? 100 : (uint8_t)l;
     if (n & 1) block[n++] = 0;
     uint8_t frame[HEADER_BYTES + FRAME_SAMPLES / 2];
     frame[0] = seq & 0xFF;
@@ -35,6 +45,7 @@ bool voice_start(void) {
     seq = 0;
     filled = 0;
     start_ms = millis();
+    level = 0;
     active = true;
     return true;
 }
@@ -65,3 +76,5 @@ bool voice_tick(void) {
 }
 
 bool voice_active(void) { return active; }
+uint32_t voice_elapsed_ms(void) { return active ? millis() - start_ms : 0; }
+uint8_t voice_level(void) { return active ? level : 0; }

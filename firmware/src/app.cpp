@@ -58,6 +58,12 @@ static bool        holding = false;
 static bool        hold_is_confirm = false;
 static bool        hold_fired = false;
 static bool        ptt_on = false;
+// Full-screen recording view over the ring: arc = time left of the 30 s,
+// dot = loudness, big timer. The ring's own title is far too small to see.
+static lv_obj_t*   rec_root = nullptr;
+static lv_obj_t*   rec_arc = nullptr;
+static lv_obj_t*   rec_dot = nullptr;
+static lv_obj_t*   rec_time = nullptr;
 
 // ---------------------------------------------------------------- helpers
 
@@ -491,6 +497,77 @@ static void activate(bool confirmed) {
 // Push-to-talk: the knob records and streams to the bridge, which transcribes
 // with Whisper and sends the text back for a look (V_STT) before it becomes a
 // prompt. No HID Space any more: in the desktop app it would type spaces.
+LV_FONT_DECLARE(font_styrene_48);
+LV_FONT_DECLARE(font_styrene_20);
+
+static void rec_create(void) {
+    rec_root = lv_obj_create(overlay);
+    lv_obj_remove_style_all(rec_root);
+    lv_obj_set_size(rec_root, LV_PCT(100), LV_PCT(100));
+    lv_obj_set_style_bg_color(rec_root, THEME_BG, 0);
+    lv_obj_set_style_bg_opa(rec_root, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(rec_root, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
+
+    rec_arc = lv_arc_create(rec_root);
+    lv_obj_set_size(rec_arc, 340, 340);
+    lv_obj_center(rec_arc);
+    lv_arc_set_bg_angles(rec_arc, 0, 360);
+    lv_arc_set_rotation(rec_arc, 270);
+    lv_arc_set_range(rec_arc, 0, VOICE_MAX_MS / 100);
+    lv_obj_remove_style(rec_arc, NULL, LV_PART_KNOB);
+    lv_obj_clear_flag(rec_arc, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_arc_width(rec_arc, 12, LV_PART_MAIN);
+    lv_obj_set_style_arc_color(rec_arc, THEME_BAR_BG, LV_PART_MAIN);
+    lv_obj_set_style_arc_width(rec_arc, 12, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(rec_arc, THEME_RED, LV_PART_INDICATOR);
+
+    rec_dot = lv_obj_create(rec_root);
+    lv_obj_remove_style_all(rec_dot);
+    lv_obj_set_style_radius(rec_dot, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(rec_dot, THEME_RED, 0);
+    lv_obj_set_style_bg_opa(rec_dot, LV_OPA_COVER, 0);
+    lv_obj_set_size(rec_dot, 60, 60);
+    lv_obj_align(rec_dot, LV_ALIGN_CENTER, 0, -50);
+
+    rec_time = lv_label_create(rec_root);
+    lv_obj_set_style_text_font(rec_time, &font_styrene_48, 0);
+    lv_obj_set_style_text_color(rec_time, THEME_TEXT, 0);
+    lv_obj_align(rec_time, LV_ALIGN_CENTER, 0, 30);
+
+    lv_obj_t* hint = lv_label_create(rec_root);
+    lv_obj_set_style_text_font(hint, &font_styrene_20, 0);
+    lv_obj_set_style_text_color(hint, THEME_DIM, 0);
+    lv_label_set_text(hint, "Aufnahme – loslassen zum Senden");
+    lv_obj_set_width(hint, 220);
+    lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
+    lv_obj_align(hint, LV_ALIGN_CENTER, 0, 92);
+    lv_obj_add_flag(rec_root, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void rec_update(void) {
+    if (!rec_root) return;
+    const uint32_t ms = voice_elapsed_ms();
+    lv_arc_set_value(rec_arc, (int32_t)(ms / 100));
+    const int d = 44 + voice_level() * 56 / 100;    // 44..100 px with the voice
+    lv_obj_set_size(rec_dot, d, d);
+    lv_obj_align(rec_dot, LV_ALIGN_CENTER, 0, -50);
+    char buf[8];
+    snprintf(buf, sizeof(buf), "0:%02u", (unsigned)(ms / 1000));
+    lv_label_set_text(rec_time, buf);
+}
+
+static void rec_show(bool on) {
+    if (!rec_root) return;
+    if (on) {
+        rec_update();
+        lv_obj_clear_flag(rec_root, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(rec_root);
+    } else {
+        lv_obj_add_flag(rec_root, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
 static void ptt(bool on) {
     if (on == ptt_on) return;
     if (on && !connected) { show_hint("nicht verbunden"); return; }
@@ -498,6 +575,7 @@ static void ptt(bool on) {
     ptt_on = on;
     if (!on) voice_stop();
     proto_send_ptt(on);
+    rec_show(on);
     if (on) {
         ring_set_title(ring, "Aufnahme ...");
     } else if (view != V_CLOSED) {
@@ -585,6 +663,7 @@ void app_init(void) {
     lv_obj_clear_flag(overlay, LV_OBJ_FLAG_GESTURE_BUBBLE);
     lv_obj_add_event_cb(overlay, overlay_event_cb, LV_EVENT_ALL, NULL);
     ring = ring_create(overlay);
+    rec_create();
     lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
 }
 
@@ -658,6 +737,10 @@ void app_set_connected(bool c) {
 
 void app_tick(void) {
     if (ptt_on && !voice_tick()) ptt(false);   // the take hit its 30 s
+    if (ptt_on) {
+        static uint32_t last_rec_ms = 0;
+        if (millis() - last_rec_ms >= 50) { last_rec_ms = millis(); rec_update(); }
+    }
     if (view == V_CLOSED) return;
     const uint32_t now = millis();
     if (hint_until && (int32_t)(now - hint_until) >= 0) {
