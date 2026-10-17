@@ -46,3 +46,11 @@ Session der Desktop-App. Typen: `plugin-authoring/types/claude-code.d.ts` des Bu
   Tastendruck-Rückfall (`bridge/control.py`, Desktop: Cmd+Shift+M + Ziffer).
 - Validator-Regeln für Hooks-Module: Ereignisnamen als String-Literal, Hook als Funktionsliteral,
   `$` nur an Funktionen übergeben, die oben in der Datei deklariert sind.
+
+## Reasoning-Anzeige der Desktop-App (2026-10-17)
+
+- Cmd+Shift+E öffnet kein eigenes Reasoning-Menü, sondern das Modell-Popup: Ziffern wählen dort das
+  **Modell** (Test vom Knob stellte versehentlich Sonnet ein). Reasoning ist im Popup nur per
+  Tab/Pfeiltasten erreichbar → bewusst nicht nachgebaut (nicht stabil).
+- Reasoning vom Knob bleibt `/effort` im Mod: wirkt auf die Engine, die Anzeige unter dem
+  Eingabefeld bleibt auf dem alten Wert.
