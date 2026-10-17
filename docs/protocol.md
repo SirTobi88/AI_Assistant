@@ -90,6 +90,16 @@ Mehrere offene Prompts stehen in einer Warteschlange; der Knob zeigt den ältest
 {"t":"stt","id":"v3","tx":"Lass die Tests nochmal laufen","fin":1}
 ```
 
+### `notice` — kurzer Hinweis
+
+```json
+{"t":"notice","tx":"Session wartet auf Eingabe am PC"}
+```
+
+Max. 60 Zeichen, liegt ~3,5 s über allem (auch der Verbrauchsübersicht) und weckt das Display.
+Die Bridge schickt ihn, wenn ein Befehl nicht ausgeführt wurde (Adapter lehnt ab oder der Mod
+meldet einen Fehler; „stopped“ der Engine → „Session wartet auf Eingabe am PC“).
+
 ## Knob → Bridge (TX-Notify)
 
 | Befehl | Beispiel |

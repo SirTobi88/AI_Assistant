@@ -163,6 +163,36 @@ static void show_hint(const char* text) {
     hint_until = millis() + HINT_MS;
 }
 
+// A line from the bridge (a command that did not go through), over
+// whatever is showing, the usage screens included.
+#define NOTICE_MS 3500
+static lv_obj_t* notice_box = nullptr;
+static uint32_t  notice_until = 0;
+
+LV_FONT_DECLARE(font_styrene_20);
+
+static void notice_show(const char* text) {
+    if (!notice_box) {
+        notice_box = lv_label_create(lv_layer_top());
+        lv_obj_set_width(notice_box, 260);
+        lv_label_set_long_mode(notice_box, LV_LABEL_LONG_WRAP);
+        lv_obj_set_style_text_font(notice_box, &font_styrene_20, 0);
+        lv_obj_set_style_text_align(notice_box, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_color(notice_box, lv_color_hex(0xffffff), 0);
+        lv_obj_set_style_bg_color(notice_box, lv_color_hex(COL_ERROR), 0);
+        lv_obj_set_style_bg_opa(notice_box, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(notice_box, 16, 0);
+        lv_obj_set_style_pad_hor(notice_box, 14, 0);
+        lv_obj_set_style_pad_ver(notice_box, 10, 0);
+        lv_obj_align(notice_box, LV_ALIGN_BOTTOM_MID, 0, -70);
+    }
+    lv_label_set_text(notice_box, text);
+    lv_obj_remove_flag(notice_box, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(notice_box);
+    notice_until = millis() + NOTICE_MS;
+    idle_note_activity();        // wake the screen so it can be read
+}
+
 // ---------------------------------------------------------------- builders
 
 static void build(view_t v, int focus);
@@ -919,6 +949,7 @@ void app_on_proto(void) {
     AppState* st = proto_state();
     const uint32_t chg = st->changed;
     st->changed = 0;
+    if (chg & PROTO_CHG_NOTICE) notice_show(st->notice);
 
     if (chg & PROTO_CHG_PROMPTS) {
         if (view == V_PROMPT) {
@@ -977,6 +1008,10 @@ void app_tick(void) {
     if (rec_waiting && millis() - rec_wait_since > REC_WAIT_MS + rec_take_ms / 4) {
         rec_wait_end();          // no transcript: bridge gone or Whisper stuck
         if (view != V_CLOSED) show_hint("keine Antwort vom Mac");
+    }
+    if (notice_until && (int32_t)(millis() - notice_until) >= 0) {
+        notice_until = 0;
+        lv_obj_add_flag(notice_box, LV_OBJ_FLAG_HIDDEN);
     }
     if (view == V_CLOSED) return;
     const uint32_t now = millis();

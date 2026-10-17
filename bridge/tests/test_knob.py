@@ -291,5 +291,8 @@ def test_failed_control_reverts_the_knob():
         hub.on_command(protocol.Command("set", {"sid": "abcdef012345", "key": "fast", "value": True}))
         await asyncio.sleep(0.01)
         assert hub.sessions[0].fast is False
-        assert link.sent[n]["t"] == "sessions" and link.sent[n]["ss"][0][7] == 0
+        after = link.sent[n:]
+        assert {"t": "notice", "tx": "nicht ausgeführt"} in after
+        ss = next(m for m in after if m["t"] == "sessions")
+        assert ss["ss"][0][7] == 0
     asyncio.run(go())

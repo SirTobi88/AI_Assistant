@@ -78,6 +78,7 @@ struct AppState {
     uint8_t     n_prompts;
     MonitorData mon;
     SttData     stt;
+    char        notice[128];                  // protocol.MAX_NOTICE_TEXT (60 chars, umlauts 2 bytes)
     uint32_t    changed;                      // bit per message type, cleared by the reader
 };
 
@@ -86,6 +87,7 @@ struct AppState {
 #define PROTO_CHG_PROMPTS  (1u << 2)
 #define PROTO_CHG_MONITOR  (1u << 3)
 #define PROTO_CHG_STT      (1u << 4)
+#define PROTO_CHG_NOTICE   (1u << 5)
 
 enum proto_result_t {
     PROTO_LEGACY,            // no "t": the usage payload, not ours

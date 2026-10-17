@@ -411,3 +411,42 @@ def test_sessions_come_most_recently_active_first(tmp_path):
     # a prompt typed now beats the app's older record
     reg.report({"sid": "old", "prompted": True})
     assert [v.sid for v in reg.views()][0] == "old"
+
+
+def test_failed_command_reaches_the_knob_as_a_notice():
+    reg = ms.ModRegistry(log=lambda m: None)
+    reg.hello({"sid": "s1", "cwd": "/x"})
+    seen = []
+    reg.on_fail = seen.append
+    reg.result({"sid": "s1", "ok": False, "cmd": {"t": "set", "key": "model", "value": "opus"},
+                "error": "HooksError: ai-knob: $.command.run: the session was stopped and nobody has sent input since"})
+    reg.result({"sid": "s1", "ok": False, "cmd": {"t": "set", "key": "effort", "value": "high"}, "error": "boom"})
+    reg.result({"sid": "s1", "ok": True, "cmd": {"t": "set", "key": "effort", "value": "high"}})
+    assert seen == ["Session wartet auf Eingabe am PC", "Reasoning nicht ausgeführt"]
+
+
+def test_hub_sends_a_notice_when_the_adapter_cannot_set():
+    sent = []
+
+    class Link:
+        async def send(self, msg):
+            sent.append(msg)
+            return True
+
+    class No:
+        def set(self, *a): return False
+        def interrupt(self, *a): return False
+        def switch(self, *a): return True
+
+    async def go():
+        hub = Hub(adapter=No(), log=lambda m: None, socket_path=Path(tempfile.mkdtemp()) / "h.sock")
+        hub.link = Link()
+        hub.sessions = [protocol.Session(sid="abcdef123456789", label="x", state="idle")]
+        short = protocol.short_sid("abcdef123456789")
+        hub.on_command(protocol.Command("set", {"sid": short, "key": "model", "value": "opus"}))
+        hub.on_command(protocol.Command("interrupt", {"sid": short}))
+        await asyncio.sleep(0.01)
+
+    asyncio.run(go())
+    notices = [m["tx"] for m in sent if m.get("t") == "notice"]
+    assert notices == ["nicht ausgeführt", "Stopp nicht ausgeführt"]

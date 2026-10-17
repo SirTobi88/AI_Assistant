@@ -94,6 +94,18 @@ class ModSession:
             fast=bool(shown["fast"]), cwd=self.cwd, entrypoint=self.entrypoint)
 
 
+_FAIL_WHAT = {"model": "Modell", "effort": "Reasoning", "mode": "Modus", "fast": "Fast",
+              "prompt": "Sprache", "fill": "Text", "interrupt": "Stopp"}
+
+
+def fail_notice(cmd: dict, error: str) -> str:
+    """The knob's line for a command the mod could not carry out."""
+    what = _FAIL_WHAT.get(cmd.get("key") if cmd.get("t") in ("set", "app_set") else cmd.get("t"), "")
+    if "stopped" in error:          # the engine refuses until the person types again
+        return "Session wartet auf Eingabe am PC"
+    return f"{what} nicht ausgeführt" if what else "nicht ausgeführt"
+
+
 class ModRegistry:
     """Sessions that run the mod, their command queues and their readings."""
 
@@ -211,6 +223,8 @@ class ModRegistry:
 
     # ---- commands
 
+    on_fail = None           # callable(text): a command the mod could not carry out
+
     def queue(self, sid: str, cmd: dict) -> bool:
         s = self.sessions.get(sid)
         if s is None:
@@ -241,6 +255,8 @@ class ModRegistry:
                 setattr(s, cmd["key"], cmd["value"])
         if not body.get("ok"):
             self.log(f"Mod {s.sid[:8]}: {cmd} failed: {body.get('error')}")
+            if self.on_fail is not None:
+                self.on_fail(fail_notice(cmd, str(body.get("error") or "")))
         else:
             self.log(f"Mod {s.sid[:8]}: {cmd} done")
 

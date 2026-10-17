@@ -104,6 +104,14 @@ def prompt_done_msg(prompt_id: str) -> dict:
     return {"t": "prompt_done", "id": prompt_id}
 
 
+MAX_NOTICE_TEXT = 60
+
+
+def notice_msg(text: str) -> dict:
+    """A short line the knob shows for a few seconds (a command that failed)."""
+    return {"t": "notice", "tx": _clip(text, MAX_NOTICE_TEXT)}
+
+
 def stt_msg(stt_id: str, text: str, final: bool) -> dict:
     return {"t": "stt", "id": stt_id, "tx": _clip(text, MAX_STT_TEXT), "fin": int(final)}
 

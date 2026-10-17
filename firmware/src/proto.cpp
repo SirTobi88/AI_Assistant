@@ -146,6 +146,11 @@ proto_result_t proto_handle(const char* json, uint32_t now_ms) {
     else if (strcmp(t, "prompt_done") == 0) { proto_drop_prompt(doc["id"] | ""); ok = true; }
     else if (strcmp(t, "monitor") == 0)     ok = handle_monitor(doc);
     else if (strcmp(t, "stt") == 0)         ok = handle_stt(doc);
+    else if (strcmp(t, "notice") == 0) {
+        copy(st.notice, sizeof(st.notice), doc["tx"] | "");
+        st.changed |= PROTO_CHG_NOTICE;
+        ok = st.notice[0] != 0;
+    }
     return ok ? PROTO_OK : PROTO_BAD;
 }
 

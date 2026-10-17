@@ -126,6 +126,11 @@ class Hub:
     async def _send(self, msg: dict) -> bool:
         return bool(self.link) and await self.link.send(msg)
 
+    def notice(self, text: str) -> None:
+        """A short line on the knob, e.g. a command that did not go through."""
+        self.log(f"Knob notice: {text}")
+        asyncio.ensure_future(self._send(protocol.notice_msg(text)))
+
     # ---- sessions / monitor
 
     async def set_sessions(self, sessions: list[protocol.Session], active: str | None = None) -> None:
@@ -199,12 +204,15 @@ class Hub:
             # list shows the new one right away and the next hook event confirms.
             if self.adapter.set(session, a["key"], a["value"]):
                 setattr(session, a["key"], a["value"])
+            else:
+                self.notice("nicht ausgeführt")
             # Resend either way: on failure this undoes the knob's optimistic change.
             self._last_sessions_msg = None
             asyncio.ensure_future(self.publish_sessions())
             return
         if cmd.t == "interrupt":
-            self.adapter.interrupt(session)
+            if not self.adapter.interrupt(session):
+                self.notice("Stopp nicht ausgeführt")
             return
         if cmd.t == "menu":
             menu = getattr(self.adapter, "menu", None)

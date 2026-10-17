@@ -1085,6 +1085,7 @@ async def main() -> None:
     HUB.voice_cfg = control.read_config()
     cli = voice.whisper_cli(HUB.voice_cfg)
     log(f"Voice: {'whisper-cli at ' + cli if cli else 'no whisper-cli (brew install whisper-cpp)'}")
+    MODS.on_fail = HUB.notice
     await HUB.start()
     mods = mod_server.ModServer(HUB, MODS, MOD_SOCKET or mod_server.DEFAULT_SOCKET, log)
     await mods.start()
