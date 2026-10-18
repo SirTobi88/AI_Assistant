@@ -58,7 +58,9 @@ Das Hauptmenü öffnest du durch Drehen am Ring:
 | **Monitor** | Limits, Prognose, Kontext, Agents, Tasks, Diff, CI |
 | **Stopp** | bricht den laufenden Turn ab (nur während Claude arbeitet) |
 
-Ohne Eingabe schließt sich das Menü nach 30 s und die Übersicht kommt zurück. Liegt eine Frage
+Ohne Eingabe schließt sich das Menü nach 30 s und die Übersicht kommt zurück. Nach 10 min ohne
+Eingabe geht das Display aus (Standby). Ring oder Touch wecken es, ebenso eine Frage, „needs you“
+und „your turn“. Die erste Berührung weckt nur und löst sonst nichts aus. Liegt eine Frage
 an, öffnet sie sich von selbst, egal wo du gerade bist.
 
 **Spracheingabe:** Solange du hältst, pulsiert ein roter Punkt im Rhythmus deiner Stimme, und
