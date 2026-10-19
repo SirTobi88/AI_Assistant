@@ -91,3 +91,8 @@
 - GATT-Änderungen: macOS cached die Merkmale gekoppelter Geräte. Neues Merkmal → `GATT_LAYOUT` in
   `ble.cpp` erhöhen; die Firmware schickt dann einmal „Service Changed“. Die Bridge hängt dabei
   einmal (Verbindung mit altem Cache) → Bridge neu starten, danach ist das Merkmal da.
+- Bridge als LaunchAgent: `tools/install_launchagent.sh` (Label `com.user.ai-knob-bridge`, Log
+  `~/Library/Logs/ai-knob-bridge.{out,err}.log`). Nach Bridge-Änderungen
+  `launchctl kickstart -k gui/$(id -u)/com.user.ai-knob-bridge` statt im Terminal neu starten;
+  nie zusätzlich eine Bridge im Terminal starten (der Knob nimmt eine Verbindung). Tastendrücke
+  brauchen dann Bedienungshilfen für `.venv/bin/python` (bzw. das Python dahinter).

@@ -110,6 +110,18 @@ mkdir -p ~/.config/ai-knob && cp bridge/config.example ~/.config/ai-knob/config
 .venv/bin/python -m bridge.claude_usage_daemon
 ```
 
+Dauerhaft als LaunchAgent (startet beim Anmelden, nach einem Absturz neu):
+
+```bash
+tools/install_launchagent.sh                # einrichten und starten
+tail -F ~/Library/Logs/ai-knob-bridge.out.log
+launchctl kickstart -k gui/$(id -u)/com.user.ai-knob-bridge   # nach Änderungen an der Bridge
+tools/install_launchagent.sh --uninstall
+```
+
+Unter launchd braucht `.venv/bin/python` selbst das Recht „Bedienungshilfen“ (für
+`control = keys`); im Terminal erbt es das Recht der Terminal-App.
+
 Die Bridge verbindet sich per BLE mit dem Knob, nimmt die Verbindungen der Sessions entgegen
 (`~/.config/ai-knob/mod.sock`) und schickt Limits, Sessions und Fragen an den Knob. Läuft sie
 nicht, zeigt Claude Code einfach seine normalen Dialoge.
