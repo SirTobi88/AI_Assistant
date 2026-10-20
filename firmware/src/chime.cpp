@@ -106,7 +106,8 @@ static const cue_note cue_limit[]     = { {523, 140}, {392, 140}, {262, 240} };
 static const cue_note* cue_seq = nullptr;
 static uint8_t         cue_len = 0;
 
-#define CUE_AMPLITUDE 9000    // ~28% of full scale — audible, no amp strain
+#define CUE_AMPLITUDE 30000   // ~92% of full scale: the knob's line-out has no amp to
+                              // strain, and 9000 was barely audible on earbuds
 #define CUE_EDGE_MS   4       // attack/release ramp; without it the amp clicks
 #define CUE_TAIL_MS   120     // silence pushed behind a cue to flush the DMA ring
 
